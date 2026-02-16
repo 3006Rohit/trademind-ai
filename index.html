@@ -1,0 +1,94 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TradeMind AI - Intelligent Trading</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --trade-bg: #0f1115;
+        --trade-panel: #1e2026;
+        --trade-panel-focus: #15171c;
+        --trade-border: #2a2e39;
+        --trade-text: #d1d4dc;
+        --trade-text-muted: #9ca3af;
+        --trade-accent: #2962ff;
+      }
+      
+      [data-theme="light"] {
+        --trade-bg: #ffffff;
+        --trade-panel: #f3f4f6;
+        --trade-panel-focus: #e5e7eb;
+        --trade-border: #d1d5db;
+        --trade-text: #111827;
+        --trade-text-muted: #6b7280;
+      }
+
+      body {
+        background-color: var(--trade-bg);
+        color: var(--trade-text);
+      }
+      
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--trade-panel);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--trade-border);
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--trade-text-muted);
+      }
+    </style>
+    <script>
+      tailwind.config = {
+        darkMode: ['class', '[data-theme="dark"]'],
+        theme: {
+          extend: {
+            colors: {
+              trade: {
+                bg: 'var(--trade-bg)', 
+                panel: 'var(--trade-panel)', 
+                'panel-focus': 'var(--trade-panel-focus)',
+                border: 'var(--trade-border)',
+                accent: 'var(--trade-accent)', 
+                up: '#089981', 
+                down: '#f23645', 
+                text: 'var(--trade-text)', 
+                'text-muted': 'var(--trade-text-muted)', 
+              }
+            },
+            fontFamily: {
+              mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", 'monospace'],
+            }
+          }
+        }
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
+    "lightweight-charts": "https://aistudiocdn.com/lightweight-charts@^4.1.1",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
