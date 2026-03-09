@@ -1,13 +1,13 @@
 {
+  "framework": "vite",
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "@vercel/node@3"
+    }
+  },
   "rewrites": [
-    {
-      "source": "/api/yahoo/(.*)",
-      "destination": "/api/yahoo/$1"
-    },
-    {
-      "source": "/api/binance/(.*)",
-      "destination": "/api/binance/$1"
-    },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
