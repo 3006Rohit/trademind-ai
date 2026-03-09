@@ -181,3 +181,21 @@ export interface UserData {
   history: Trade[];
   drawings: Drawing[];
 }
+
+export interface PortfolioSuggestionItem {
+  symbol: string;
+  score: number;
+  weight: number;
+  lastPrice: number;
+  recommendedAmount: number;
+  recommendedQty: number;
+  reason: string;
+}
+
+export interface PortfolioSuggestion {
+  generatedAt: number;
+  market: string;
+  investableCapital: number;
+  methodology: string;
+  items: PortfolioSuggestionItem[];
+}

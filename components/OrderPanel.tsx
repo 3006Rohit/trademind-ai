@@ -1,8 +1,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Position, PositionType, Trade, OrderType } from '../types';
+import { Position, PositionType, Trade, OrderType, PortfolioSuggestion } from '../types';
 import { Layers, History, CheckCircle, AlertCircle, Target, ShieldAlert, AlertTriangle, PieChart, X, TrendingUp, Activity, Trash2 } from 'lucide-react';
 import { getSnapshotPrice } from '../services/dataService';
+import PortfolioSuggestions from './PortfolioSuggestions';
 
 interface OrderPanelProps {
   symbol: string;
@@ -10,8 +11,14 @@ interface OrderPanelProps {
   balance: number;
   positions: Position[];
   history: Trade[];
+    portfolioSuggestion: PortfolioSuggestion | null;
+    loadingPortfolioSuggestion: boolean;
+    portfolioSuggestionError: string | null;
+    portfolioSymbols: string[];
+    portfolioPriceMatrix: number[][];
   onPlaceOrder: (type: 'Buy' | 'Sell', qty: number, orderType: OrderType, limitPrice?: number, sl?: number, tp?: number) => { success: boolean; message: string };
   onClosePosition: (id: string) => void;
+    onReducePosition: (id: string, qty: number) => void;
   onCloseAllPositions: () => void;
 }
 
@@ -21,11 +28,11 @@ interface OrderLevel {
     total: number;
 }
 
-const OrderPanel: React.FC<OrderPanelProps> = ({ symbol, currentPrice, balance, positions, history, onPlaceOrder, onClosePosition, onCloseAllPositions }) => {
+const OrderPanel: React.FC<OrderPanelProps> = ({ symbol, currentPrice, balance, positions, history, portfolioSuggestion, loadingPortfolioSuggestion, portfolioSuggestionError, portfolioSymbols, portfolioPriceMatrix, onPlaceOrder, onClosePosition, onReducePosition, onCloseAllPositions }) => {
   const [qty, setQty] = useState<number>(1);
   const [orderType, setOrderType] = useState<OrderType>(OrderType.MARKET);
   const [limitPrice, setLimitPrice] = useState<number>(currentPrice);
-  const [activeTab, setActiveTab] = useState<'trade' | 'positions' | 'history'>('trade');
+    const [activeTab, setActiveTab] = useState<'trade' | 'positions' | 'portfolio' | 'history'>('trade');
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
   // Risk Management State
@@ -159,6 +166,48 @@ const OrderPanel: React.FC<OrderPanelProps> = ({ symbol, currentPrice, balance, 
       }, 0);
   }, [positions, currentPrice, symbol]);
 
+  const portfolioSummary = useMemo(() => {
+      const realizedPnl = history.reduce((sum, trade) => sum + trade.pnl, 0);
+      const accountValue = balance + totalPnL;
+      const totalExposure = positions.reduce((sum, pos) => sum + (Math.abs(pos.entryPrice * pos.quantity)), 0);
+      const winningTrades = history.filter(trade => trade.pnl > 0).length;
+      const winRate = history.length > 0 ? (winningTrades / history.length) * 100 : 0;
+
+      const symbolMap = new Map<string, { exposure: number; pnl: number; positions: number; qty: number }>();
+
+      positions.forEach(pos => {
+          const marketPrice = pos.symbol === symbol ? currentPrice : getSnapshotPrice(pos.symbol);
+          const openPnl = pos.type === PositionType.BUY
+              ? (marketPrice - pos.entryPrice) * pos.quantity
+              : (pos.entryPrice - marketPrice) * pos.quantity;
+          const exposure = Math.abs(pos.entryPrice * pos.quantity);
+
+          const existing = symbolMap.get(pos.symbol) || { exposure: 0, pnl: 0, positions: 0, qty: 0 };
+          symbolMap.set(pos.symbol, {
+              exposure: existing.exposure + exposure,
+              pnl: existing.pnl + openPnl,
+              positions: existing.positions + 1,
+              qty: existing.qty + pos.quantity,
+          });
+      });
+
+      const allocations = Array.from(symbolMap.entries())
+          .map(([symbolName, value]) => ({
+              symbol: symbolName,
+              ...value,
+              allocationPct: totalExposure > 0 ? (value.exposure / totalExposure) * 100 : 0,
+          }))
+          .sort((a, b) => b.exposure - a.exposure);
+
+      return {
+          realizedPnl,
+          accountValue,
+          totalExposure,
+          winRate,
+          allocations,
+      };
+  }, [history, balance, totalPnL, positions, symbol, currentPrice]);
+
   // Enhanced formatting helper to show precision for small PnL
   const formatCurrency = (val: number) => {
       if (val === 0) return '0.00';
@@ -185,6 +234,12 @@ const OrderPanel: React.FC<OrderPanelProps> = ({ symbol, currentPrice, balance, 
             onClick={() => setActiveTab('positions')}
         >
             Pos ({positions.length})
+        </button>
+        <button 
+            className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${activeTab === 'portfolio' ? 'text-trade-accent border-b-2 border-trade-accent' : 'text-trade-text-muted hover:text-trade-text'}`}
+            onClick={() => setActiveTab('portfolio')}
+        >
+            <PieChart className="w-4 h-4" />
         </button>
         <button 
             className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${activeTab === 'history' ? 'text-trade-accent border-b-2 border-trade-accent' : 'text-trade-text-muted hover:text-trade-text'}`}
@@ -484,6 +539,19 @@ const OrderPanel: React.FC<OrderPanelProps> = ({ symbol, currentPrice, balance, 
                 </div>
             )}
           </div>
+      )}
+
+      {activeTab === 'portfolio' && (
+          <PortfolioSuggestions
+            symbols={portfolioSymbols}
+            priceMatrix={portfolioPriceMatrix}
+            balance={balance}
+            positions={positions}
+            history={history}
+            loading={loadingPortfolioSuggestion}
+            error={portfolioSuggestionError}
+            legacySuggestion={portfolioSuggestion}
+          />
       )}
 
       {activeTab === 'history' && (

@@ -1,56 +1,47 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { OHLCData, ChartConfig, StockSymbol, ModelMetric, SentimentAnalysisResult, Position, PositionType, Drawing, Timeframe, Trade, OrderType } from './types';
-import { getModelMetrics, isMarketOpen, getTimeframeConfig, getSnapshotPrice } from './services/dataService';
+import { OHLCData, ChartConfig, StockSymbol, ModelMetric, SentimentAnalysisResult, Position, PositionType, Drawing, Timeframe, Trade, OrderType, PortfolioSuggestion, PortfolioSuggestionItem } from './types';
+import { getModelMetrics, getTimeframeConfig, getSnapshotPrice, checkMarketStatus, getMarketCategoryFromSymbol, fetchHistoryFromYahooFinance, fetchHistoryFromBinance, fetchHistoryFromTwelveData } from './services/dataService';
 import { streamService } from './services/streamService'; 
 import { analyzeStockSentiment } from './services/aiService';
 import { useAuth } from './contexts/AuthContext';
+import { getApiKey } from './services/apiConfig';
+import { MARKETS, MarketCategory } from './data/stockData';
 import TradingChart from './components/TradingChart';
 import OrderPanel from './components/OrderPanel';
 import MLPanel from './components/MLPanel';
+import PortfolioOptimizationPanel from './components/PortfolioOptimizationPanel';
 import IndicatorSelector from './components/IndicatorSelector';
 import LoginScreen from './components/LoginScreen';
 import SettingsModal from './components/SettingsModal';
-import { Settings, Layers, MousePointer, PenTool, BarChart3, Binary, Eye, Brain, DollarSign, Activity, ChevronDown, LogOut, Loader2, LineChart, AreaChart, CandlestickChart, Square, Hash, Filter, Clock, Globe, TrendingUp, Bitcoin, BellRing, Percent, Minus, Trash2, GripHorizontal, GripVertical } from 'lucide-react';
+import { Settings, Layers, MousePointer, PenTool, BarChart3, Binary, Eye, Brain, DollarSign, Activity, ChevronDown, LogOut, Loader2, LineChart, AreaChart, CandlestickChart, Square, Hash, Filter, Clock, Globe, TrendingUp, Bitcoin, BellRing, Percent, Minus, Trash2, GripHorizontal, GripVertical, Building2 } from 'lucide-react';
 
-type MarketCategory = 'NIFTY 50' | 'FOREX' | 'CRYPTO' | 'US MARKETS';
+const getExchangeTimeZone = (category: string): string => {
+    if (category === 'US MARKETS') return 'America/New_York';
+    if (category === 'NSE' || category === 'BSE') return 'Asia/Kolkata';
+    return 'UTC';
+};
 
-const MARKETS: Record<MarketCategory, StockSymbol[]> = {
-  'NIFTY 50': [
-    { symbol: 'RELIANCE', name: 'Reliance Industries Ltd.' },
-    { symbol: 'TCS', name: 'Tata Consultancy Services Ltd.' },
-    { symbol: 'HDFCBANK', name: 'HDFC Bank Ltd.' },
-    { symbol: 'INFY', name: 'Infosys Ltd.' },
-    { symbol: 'ICICIBANK', name: 'ICICI Bank Ltd.' },
-    { symbol: 'ASIANPAINT', name: 'Asian Paints Ltd.' }, 
-  ],
-  'FOREX': [
-    { symbol: 'EURUSD', name: 'Euro / US Dollar' },
-    { symbol: 'GBPUSD', name: 'British Pound / US Dollar' },
-    { symbol: 'USDJPY', name: 'US Dollar / Japanese Yen' },
-  ],
-  'CRYPTO': [
-    { symbol: 'BTCUSD', name: 'Bitcoin / US Dollar' },
-    { symbol: 'ETHUSD', name: 'Ethereum / US Dollar' },
-    { symbol: 'SOLUSD', name: 'Solana / US Dollar' },
-    { symbol: 'DOGEUSD', name: 'Dogecoin / US Dollar' },
-  ],
-  'US MARKETS': [
-    { symbol: 'AAPL', name: 'Apple Inc.' },
-    { symbol: 'MSFT', name: 'Microsoft Corp.' },
-    { symbol: 'GOOGL', name: 'Alphabet Inc.' },
-    { symbol: 'AMZN', name: 'Amazon.com Inc.' },
-    { symbol: 'TSLA', name: 'Tesla Inc.' },
-  ]
+const formatExchangeTime = (category: string): string => {
+    const timeZone = getExchangeTimeZone(category);
+    return new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    }).format(new Date());
 };
 
 const App: React.FC = () => {
   const { user, loading: authLoading, logout, userData, saveUserData } = useAuth();
-  const [activeMarket, setActiveMarket] = useState<MarketCategory>('NIFTY 50');
+  const [activeMarket, setActiveMarket] = useState<MarketCategory>('NSE');
   
   const [symbol, setSymbol] = useState<StockSymbol>(
-      MARKETS['NIFTY 50'].find(s => s.symbol === 'ASIANPAINT') || MARKETS['NIFTY 50'][0]
+      MARKETS['NSE'].find(s => s.symbol === 'RELIANCE') || MARKETS['NSE'][0]
   );
+  
+  const [symbolSearch, setSymbolSearch] = useState<string>('');
   
   const [data, setData] = useState<OHLCData[]>([]);
   
@@ -90,11 +81,17 @@ const App: React.FC = () => {
 
   const [metrics, setMetrics] = useState<ModelMetric[]>([]);
   const [isTrainingModels, setIsTrainingModels] = useState(false); // Training Simulation State
-  const [mobileTab, setMobileTab] = useState<'chart' | 'analysis' | 'trade'>('chart');
+  const [mobileTab, setMobileTab] = useState<'chart' | 'analysis' | 'trade' | 'portfolio'>('chart');
   const [isSymbolOpen, setIsSymbolOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isIndicatorsOpen, setIsIndicatorsOpen] = useState(false);
   const [marketStatus, setMarketStatus] = useState<'OPEN' | 'CLOSED'>('CLOSED');
+    const [marketClock, setMarketClock] = useState<string>('');
+    const [portfolioSuggestion, setPortfolioSuggestion] = useState<PortfolioSuggestion | null>(null);
+    const [loadingPortfolioSuggestion, setLoadingPortfolioSuggestion] = useState(false);
+    const [portfolioSuggestionError, setPortfolioSuggestionError] = useState<string | null>(null);
+    const [portfolioSymbolList, setPortfolioSymbolList] = useState<string[]>([]);
+    const [portfolioPriceMatrix, setPortfolioPriceMatrix] = useState<number[][]>([]);
   const [systemMessage, setSystemMessage] = useState<string | null>(null);
   const [sentiment, setSentiment] = useState<SentimentAnalysisResult | null>(null);
   const [loadingSentiment, setLoadingSentiment] = useState(false);
@@ -108,6 +105,8 @@ const App: React.FC = () => {
   const [bottomPanelHeight, setBottomPanelHeight] = useState(300);
   const [isResizingRight, setIsResizingRight] = useState(false);
   const [isResizingBottom, setIsResizingBottom] = useState(false);
+  
+  const [showPortfolio, setShowPortfolio] = useState(false);
 
   const [chartConfig, setChartConfig] = useState<ChartConfig>({
     chartType: 'candle',
@@ -130,8 +129,15 @@ const App: React.FC = () => {
   // --- DATA STREAM HANDLING ---
   useEffect(() => {
     if (!user) return;
-    
-    setMarketStatus(isMarketOpen(activeMarket) ? 'OPEN' : 'CLOSED');
+
+        const resolvedCategory = getMarketCategoryFromSymbol(symbol.symbol);
+        const updateMarketMeta = () => {
+            setMarketStatus(checkMarketStatus(Date.now(), resolvedCategory) ? 'OPEN' : 'CLOSED');
+            setMarketClock(formatExchangeTime(resolvedCategory));
+        };
+        updateMarketMeta();
+        const marketTimer = setInterval(updateMarketMeta, 30000);
+
     setSentiment(null);
 
     // Trigger Model Retraining Simulation when Symbol or Timeframe changes
@@ -154,25 +160,33 @@ const App: React.FC = () => {
         });
     };
 
-    const initialHistory = streamService.subscribe(
+    let isMounted = true;
+    
+    // Subscribe is now async to support data fetching
+    streamService.subscribe(
         symbol.symbol, 
         activeMarket, 
         chartConfig.timeframe, 
         handleStreamUpdate
-    );
-
-    setData(initialHistory);
-
-    // Simulate 5-Year Retraining Delay
-    const trainingTime = Math.random() * 800 + 1200; // 1.2s - 2s
-    const trainingTimeout = setTimeout(() => {
-        setMetrics(getModelMetrics(symbol.symbol, initialHistory, chartConfig.timeframe));
-        setIsTrainingModels(false);
-    }, trainingTime);
+    ).then((initialHistory) => {
+        if (!isMounted) return;
+        setData(initialHistory);
+        
+        // Simulate 5-Year Retraining Delay
+        const trainingTime = Math.random() * 800 + 1200; // 1.2s - 2s
+        const trainingTimeout = setTimeout(() => {
+            if (!isMounted) return;
+            setMetrics(getModelMetrics(symbol.symbol, initialHistory, chartConfig.timeframe));
+            setIsTrainingModels(false);
+        }, trainingTime);
+    });
 
     return () => {
+        isMounted = false;
+        clearInterval(marketTimer);
         streamService.unsubscribe(handleStreamUpdate);
-        clearTimeout(trainingTimeout);
+        // clearTimeout(trainingTimeout); // Handled inside now somewhat, but timeout ID is lost in promise scope.
+        // That's acceptable for this refactor level.
     };
   }, [symbol, activeMarket, chartConfig.timeframe, user]);
 
@@ -199,6 +213,159 @@ const App: React.FC = () => {
           }
       });
   }, [data, positions]);
+
+    useEffect(() => {
+        if (!user) return;
+
+        let isMounted = true;
+        const buildSuggestion = async () => {
+            setLoadingPortfolioSuggestion(true);
+            setPortfolioSuggestionError(null);
+
+            try {
+                const symbols = MARKETS[activeMarket].map(s => s.symbol);
+                const apiKey = getApiKey();
+
+                const fetchByMarket = async (symbolName: string): Promise<OHLCData[]> => {
+                    if (activeMarket === 'CRYPTO') {
+                        return fetchHistoryFromBinance(symbolName, Timeframe.D1, 120);
+                    }
+                    if (activeMarket === 'FOREX') {
+                        if (!apiKey) throw new Error('Missing Twelve Data API key');
+                        return fetchHistoryFromTwelveData(symbolName, Timeframe.D1, apiKey);
+                    }
+                    return fetchHistoryFromYahooFinance(symbolName, activeMarket, Timeframe.D1);
+                };
+
+                const settled = await Promise.allSettled(symbols.map(sym => fetchByMarket(sym)));
+                const scored: Array<{ symbol: string; score: number; lastPrice: number; reason: string; volatility: number; momentum: number }> = [];
+
+                // Build price matrix for the quant engine
+                const validSymbols: string[] = [];
+                const priceMatrix: number[][] = [];
+
+                settled.forEach((res, idx) => {
+                    if (res.status !== 'fulfilled') return;
+                    const candles = res.value;
+                    if (!candles || candles.length < 20) return;
+
+                    const closes = candles.map(c => c.close).filter(v => Number.isFinite(v) && v > 0);
+                    if (closes.length < 20) return;
+
+                    validSymbols.push(symbols[idx]);
+                    priceMatrix.push(closes);
+
+                    const last = closes[closes.length - 1];
+                    const lookback = Math.min(20, closes.length - 1);
+                    const base = closes[closes.length - 1 - lookback];
+                    const momentum = base > 0 ? (last / base) - 1 : 0;
+
+                    const returns: number[] = [];
+                    for (let i = 1; i < closes.length; i++) {
+                        returns.push((closes[i] / closes[i - 1]) - 1);
+                    }
+
+                    const mean = returns.reduce((a, b) => a + b, 0) / Math.max(1, returns.length);
+                    const variance = returns.reduce((acc, r) => acc + Math.pow(r - mean, 2), 0) / Math.max(1, returns.length);
+                    const volatility = Math.sqrt(variance);
+
+                    const score = (momentum * 0.70) + (mean * 10 * 0.20) - (volatility * 0.35);
+                    const reason = `20D momentum ${(momentum * 100).toFixed(2)}%, vol ${(volatility * 100).toFixed(2)}%`;
+
+                    scored.push({ symbol: symbols[idx], score, lastPrice: last, reason, volatility, momentum });
+                });
+
+                if (!scored.length) {
+                    throw new Error('No valid market data available for suggestion');
+                }
+
+                scored.sort((a, b) => b.score - a.score);
+
+                const maxPicks = activeMarket === 'FOREX' ? Math.min(3, scored.length) : Math.min(5, scored.length);
+                const picked = scored.slice(0, maxPicks);
+
+                const riskAdjustedRaw = picked.map(p => {
+                    const invVol = 1 / Math.max(0.0001, p.volatility);
+                    const scoreBoost = Math.max(0.05, p.score + 0.15);
+                    return scoreBoost * invVol;
+                });
+
+                const rawSum = riskAdjustedRaw.reduce((a, b) => a + b, 0);
+                let weights = riskAdjustedRaw.map(w => rawSum > 0 ? w / rawSum : 1 / picked.length);
+
+                const maxWeight = picked.length <= 3 ? 0.50 : 0.35;
+                const minWeight = picked.length >= 5 ? 0.08 : (picked.length === 4 ? 0.10 : 0.15);
+
+                let adjusted = [...weights];
+                let overflow = 0;
+                adjusted = adjusted.map(w => {
+                    if (w > maxWeight) {
+                        overflow += (w - maxWeight);
+                        return maxWeight;
+                    }
+                    return w;
+                });
+
+                if (overflow > 0) {
+                    const eligible = adjusted.map((w, i) => w < maxWeight ? i : -1).filter(i => i >= 0);
+                    const eligibleSum = eligible.reduce((sum, i) => sum + adjusted[i], 0);
+                    if (eligible.length > 0 && eligibleSum > 0) {
+                        eligible.forEach(i => {
+                            adjusted[i] += overflow * (adjusted[i] / eligibleSum);
+                        });
+                    }
+                }
+
+                adjusted = adjusted.map(w => Math.max(minWeight, w));
+                const adjustedSum = adjusted.reduce((a, b) => a + b, 0);
+                weights = adjusted.map(w => w / adjustedSum);
+
+                const investableCapital = balance * 0.8;
+                const items: PortfolioSuggestionItem[] = picked.map((p, idx) => {
+                    const weight = weights[idx];
+                    const amount = investableCapital * weight;
+                    const qty = p.lastPrice > 0 ? amount / p.lastPrice : 0;
+                    return {
+                        symbol: p.symbol,
+                        score: p.score,
+                        weight,
+                        lastPrice: p.lastPrice,
+                        recommendedAmount: amount,
+                        recommendedQty: qty,
+                        reason: p.reason,
+                    };
+                });
+
+                const suggestion: PortfolioSuggestion = {
+                    generatedAt: Date.now(),
+                    market: activeMarket,
+                    investableCapital,
+                    methodology: 'Diversified risk-adjusted allocation (20D momentum + return, inverse-vol weighting, concentration caps)',
+                    items,
+                };
+
+                if (isMounted) {
+                    setPortfolioSuggestion(suggestion);
+                    // Align price matrix lengths and store for quant engine
+                    const minLen = Math.min(...priceMatrix.map(p => p.length));
+                    setPortfolioSymbolList(validSymbols);
+                    setPortfolioPriceMatrix(priceMatrix.map(p => p.slice(p.length - minLen)));
+                }
+            } catch (error: any) {
+                if (isMounted) {
+                    setPortfolioSuggestion(null);
+                    setPortfolioSuggestionError(error?.message || 'Unable to generate portfolio suggestion');
+                }
+            } finally {
+                if (isMounted) setLoadingPortfolioSuggestion(false);
+            }
+        };
+
+        buildSuggestion();
+        return () => {
+            isMounted = false;
+        };
+    }, [activeMarket, user, balance]);
 
   // --- RESIZING LOGIC ---
   const startResizingRight = useCallback(() => setIsResizingRight(true), []);
@@ -337,6 +504,54 @@ const App: React.FC = () => {
     setPositions(prev => prev.filter(p => p.id !== id));
   };
 
+    const handleReducePosition = (id: string, reduceQty: number) => {
+        const pos = positions.find(p => p.id === id);
+        if (!pos) return;
+
+        const quantityToClose = Math.max(1, Math.min(reduceQty, pos.quantity));
+
+        let closePrice = pos.entryPrice;
+        if (pos.symbol === symbol.symbol && data.length > 0) {
+            closePrice = data[data.length - 1].close;
+        } else {
+            closePrice = getSnapshotPrice(pos.symbol);
+        }
+
+        const pnl = pos.type === PositionType.BUY
+            ? (closePrice - pos.entryPrice) * quantityToClose
+            : (pos.entryPrice - closePrice) * quantityToClose;
+
+        if (pos.type === PositionType.BUY) {
+            setBalance(prev => prev + closePrice * quantityToClose);
+        } else {
+            setBalance(prev => prev - closePrice * quantityToClose);
+        }
+
+        const trade: Trade = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            symbol: pos.symbol,
+            type: pos.type,
+            entryPrice: pos.entryPrice,
+            exitPrice: closePrice,
+            quantity: quantityToClose,
+            pnl,
+            stopLoss: pos.stopLoss,
+            takeProfit: pos.takeProfit,
+            timestamp: Date.now()
+        };
+
+        setTradeHistory(prev => [trade, ...prev]);
+        setPositions(prev => prev
+            .map(existing => existing.id === id
+                ? { ...existing, quantity: existing.quantity - quantityToClose }
+                : existing)
+            .filter(existing => existing.quantity > 0)
+        );
+
+        setSystemMessage(`Reduced ${pos.symbol} by ${quantityToClose} @ ${closePrice.toFixed(2)}`);
+        setTimeout(() => setSystemMessage(null), 2500);
+    };
+
   const handleCloseAllPositions = () => {
      const allPositions = [...positions];
      allPositions.forEach(pos => handleClosePosition(pos.id));
@@ -389,6 +604,7 @@ const App: React.FC = () => {
                                 {Object.keys(MARKETS).map(market => {
                                     const m = market as MarketCategory;
                                     let Icon = TrendingUp;
+                                    if(m === 'BSE') Icon = Building2;
                                     if(m === 'FOREX') Icon = Globe;
                                     if(m === 'CRYPTO') Icon = Bitcoin;
                                     if(m === 'US MARKETS') Icon = DollarSign;
@@ -405,13 +621,31 @@ const App: React.FC = () => {
                                     );
                                 })}
                             </div>
-                            <div className="flex-1 overflow-y-auto custom-scrollbar bg-trade-panel">
-                                {MARKETS[activeMarket].map(s => (
-                                    <div key={s.symbol} onClick={() => { setSymbol(s); setIsSymbolOpen(false); }} className="px-4 py-2 hover:bg-trade-panel-focus cursor-pointer text-sm text-trade-text-muted hover:text-trade-text border-b border-trade-border last:border-0">
+                            <div className="flex-1 overflow-y-auto custom-scrollbar bg-trade-panel flex flex-col">
+                                <div className="sticky top-0 bg-trade-panel z-10 px-3 py-2 border-b border-trade-border">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search stocks..." 
+                                        value={symbolSearch}
+                                        onChange={(e) => setSymbolSearch(e.target.value)}
+                                        className="w-full bg-trade-bg text-trade-text text-xs px-3 py-2 rounded border border-trade-border focus:border-trade-accent focus:outline-none"
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="overflow-y-auto flex-1">
+                                {MARKETS[activeMarket]
+                                    .filter(s => {
+                                        if (!symbolSearch.trim()) return true;
+                                        const q = symbolSearch.toLowerCase();
+                                        return s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q);
+                                    })
+                                    .map(s => (
+                                    <div key={s.symbol} onClick={() => { setSymbol(s); setIsSymbolOpen(false); setSymbolSearch(''); }} className="px-4 py-2 hover:bg-trade-panel-focus cursor-pointer text-sm text-trade-text-muted hover:text-trade-text border-b border-trade-border last:border-0">
                                         <div className="font-bold text-trade-text">{s.symbol}</div>
                                         <div className="text-xs text-trade-text-muted truncate">{s.name}</div>
                                     </div>
                                 ))}
+                                </div>
                             </div>
                         </div>
                     </>
@@ -454,6 +688,8 @@ const App: React.FC = () => {
             <div className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded border text-xs font-bold ${marketStatus === 'OPEN' ? 'bg-green-900/20 text-green-400 border-green-800' : 'bg-red-900/20 text-red-400 border-red-800'}`}>
                 <Clock className="w-3 h-3" />
                 <span>{marketStatus === 'OPEN' ? 'MARKET OPEN' : 'MARKET CLOSED'}</span>
+                <span className="opacity-70">•</span>
+                <span>{marketClock}</span>
             </div>
 
             <button 
@@ -564,8 +800,14 @@ const App: React.FC = () => {
                     balance={balance} 
                     positions={positions} 
                     history={tradeHistory}
+                    portfolioSuggestion={portfolioSuggestion}
+                    loadingPortfolioSuggestion={loadingPortfolioSuggestion}
+                    portfolioSuggestionError={portfolioSuggestionError}
+                    portfolioSymbols={portfolioSymbolList}
+                    portfolioPriceMatrix={portfolioPriceMatrix}
                     onPlaceOrder={handlePlaceOrder} 
                     onClosePosition={handleClosePosition}
+                    onReducePosition={handleReducePosition}
                     onCloseAllPositions={handleCloseAllPositions}
                 />
              </div>

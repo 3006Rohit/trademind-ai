@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #f0f4ff; stroke: #667eea; stroke-width: 2; }
+      .box-primary { fill: #4A90E2; stroke: #2E5C8A; stroke-width: 2; }
+      .box-secondary { fill: #7ED321; stroke: #5A9A1A; stroke-width: 2; }
+      .box-accent { fill: #F5A623; stroke: #C17F1B; stroke-width: 2; }
+      .box-purple { fill: #BD10E0; stroke: #8B0AA8; stroke-width: 2; }
+      .box-teal { fill: #50E3C2; stroke: #2FB89F; stroke-width: 2; }
+      .text-title { font-size: 16px; font-weight: bold; fill: white; }
+      .text-normal { font-size: 12px; fill: #333; }
+      .text-white { font-size: 12px; fill: white; font-weight: bold; }
+      .arrow { stroke: #667eea; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .section-title { font-size: 24px; font-weight: bold; fill: #667eea; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#667eea" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="600" y="30" class="section-title" text-anchor="middle">TradeMind AI - System Architecture</text>
+
+  <!-- Frontend Layer -->
+  <text x="100" y="70" class="section-title" font-size="16">Frontend Components</text>
+  
+  <rect x="50" y="100" width="140" height="80" rx="8" class="box-primary"/>
+  <text x="120" y="125" class="text-white" text-anchor="middle">App.tsx</text>
+  <text x="120" y="145" class="text-white" text-anchor="middle" font-size="11">React TypeScript</text>
+  <text x="120" y="160" class="text-white" text-anchor="middle" font-size="11">Main Application</text>
+
+  <rect x="200" y="100" width="130" height="80" rx="8" class="box-secondary"/>
+  <text x="265" y="125" class="text-normal" text-anchor="middle" font-weight="bold">TradingChart</text>
+  <text x="265" y="145" class="text-normal" text-anchor="middle" font-size="11">Candle Charts</text>
+  <text x="265" y="160" class="text-normal" text-anchor="middle" font-size="11">Real-time</text>
+
+  <rect x="350" y="100" width="130" height="80" rx="8" class="box-accent"/>
+  <text x="415" y="125" class="text-white" text-anchor="middle" font-weight="bold">MLPanel</text>
+  <text x="415" y="145" class="text-white" text-anchor="middle" font-size="11">6 ML Models</text>
+  <text x="415" y="160" class="text-white" text-anchor="middle" font-size="11">Predictions</text>
+
+  <rect x="500" y="100" width="130" height="80" rx="8" class="box-purple"/>
+  <text x="565" y="125" class="text-white" text-anchor="middle" font-weight="bold">OrderPanel</text>
+  <text x="565" y="145" class="text-white" text-anchor="middle" font-size="11">Market/Limit</text>
+  <text x="565" y="160" class="text-white" text-anchor="middle" font-size="11">Orders</text>
+
+  <rect x="650" y="100" width="130" height="80" rx="8" class="box"/>
+  <text x="715" y="125" class="text-normal" text-anchor="middle" font-weight="bold">Settings</text>
+  <text x="715" y="145" class="text-normal" text-anchor="middle" font-size="11">User</text>
+  <text x="715" y="160" class="text-normal" text-anchor="middle" font-size="11">Preferences</text>
+
+  <!-- Context Layer -->
+  <rect x="275" y="230" width="200" height="70" rx="8" class="box"/>
+  <text x="375" y="255" class="text-normal" text-anchor="middle" font-weight="bold">AuthContext</text>
+  <text x="375" y="275" class="text-normal" text-anchor="middle" font-size="11">User Sessions and State</text>
+
+  <!-- Connecting lines -->
+  <path d="M 120 180 Q 120 210 300 230" class="arrow"/>
+  <path d="M 265 180 Q 265 210 350 230" class="arrow"/>
+  <path d="M 415 180 Q 415 210 400 230" class="arrow"/>
+  <path d="M 565 180 Q 565 210 450 230" class="arrow"/>
+
+  <!-- Services Layer -->
+  <text x="100" y="350" class="section-title" font-size="16">Services Layer</text>
+  
+  <rect x="50" y="370" width="130" height="80" rx="8" class="box-secondary"/>
+  <text x="115" y="395" class="text-normal" text-anchor="middle" font-weight="bold">streamService</text>
+  <text x="115" y="415" class="text-normal" text-anchor="middle" font-size="11">Real-time Data</text>
+  <text x="115" y="430" class="text-normal" text-anchor="middle" font-size="11">Subscription</text>
+
+  <rect x="200" y="370" width="130" height="80" rx="8" class="box"/>
+  <text x="265" y="395" class="text-normal" text-anchor="middle" font-weight="bold">dataService</text>
+  <text x="265" y="415" class="text-normal" text-anchor="middle" font-size="11">Calculations</text>
+  <text x="265" y="430" class="text-normal" text-anchor="middle" font-size="11">ML Metrics</text>
+
+  <rect x="350" y="370" width="130" height="80" rx="8" class="box-accent"/>
+  <text x="415" y="395" class="text-white" text-anchor="middle" font-weight="bold">aiService</text>
+  <text x="415" y="415" class="text-white" text-anchor="middle" font-size="11">Gemini AI</text>
+  <text x="415" y="430" class="text-white" text-anchor="middle" font-size="11">Sentiment</text>
+
+  <rect x="500" y="370" width="130" height="80" rx="8" class="box"/>
+  <text x="565" y="395" class="text-normal" text-anchor="middle" font-weight="bold">authService</text>
+  <text x="565" y="415" class="text-normal" text-anchor="middle" font-size="11">Authentication</text>
+  <text x="565" y="430" class="text-normal" text-anchor="middle" font-size="11">User Data</text>
+
+  <!-- Connecting lines -->
+  <path d="M 375 300 L 115 370" class="arrow"/>
+  <path d="M 375 300 L 265 370" class="arrow"/>
+  <path d="M 375 300 L 415 370" class="arrow"/>
+  <path d="M 375 300 L 565 370" class="arrow"/>
+
+  <!-- Data Sources -->
+  <text x="100" y="510" class="section-title" font-size="16">Data Sources</text>
+  
+  <rect x="50" y="530" width="130" height="70" rx="8" class="box-teal"/>
+  <text x="115" y="555" class="text-normal" text-anchor="middle" font-weight="bold">Binance</text>
+  <text x="115" y="575" class="text-normal" text-anchor="middle" font-size="11">WebSocket Crypto</text>
+
+  <rect x="200" y="530" width="130" height="70" rx="8" class="box"/>
+  <text x="265" y="555" class="text-normal" text-anchor="middle" font-weight="bold">Simulated</text>
+  <text x="265" y="575" class="text-normal" text-anchor="middle" font-size="11">Market Data</text>
+
+  <rect x="350" y="530" width="130" height="70" rx="8" class="box"/>
+  <text x="415" y="555" class="text-normal" text-anchor="middle" font-weight="bold">Google API</text>
+  <text x="415" y="575" class="text-normal" text-anchor="middle" font-size="11">Gemini</text>
+
+  <!-- Connecting lines -->
+  <path d="M 115 450 L 115 530" class="arrow"/>
+  <path d="M 265 450 L 265 530" class="arrow"/>
+  <path d="M 415 450 L 415 530" class="arrow"/>
+
+  <!-- Portfolio State -->
+  <text x="800" y="70" class="section-title" font-size="16">State Management</text>
+  
+  <rect x="750" y="100" width="180" height="100" rx="8" class="box-teal"/>
+  <text x="840" y="130" class="text-normal" text-anchor="middle" font-weight="bold">Portfolio State</text>
+  <text x="840" y="150" class="text-normal" text-anchor="middle" font-size="11">Balance</text>
+  <text x="840" y="165" class="text-normal" text-anchor="middle" font-size="11">Open Positions</text>
+  <text x="840" y="180" class="text-normal" text-anchor="middle" font-size="11">Trade History</text>
+
+  <!-- ML Models -->
+  <text x="800" y="250" class="section-title" font-size="16">ML Models</text>
+  
+  <rect x="750" y="270" width="85" height="60" rx="8" class="box"/>
+  <text x="792" y="290" class="text-normal" text-anchor="middle" font-weight="bold" font-size="11">LSTM</text>
+  <text x="792" y="310" class="text-normal" text-anchor="middle" font-size="9">Deep Learn</text>
+
+  <rect x="845" y="270" width="85" height="60" rx="8" class="box"/>
+  <text x="887" y="290" class="text-normal" text-anchor="middle" font-weight="bold" font-size="11">XGBoost</text>
+  <text x="887" y="310" class="text-normal" text-anchor="middle" font-size="9">Ensemble</text>
+
+  <rect x="940" y="270" width="85" height="60" rx="8" class="box"/>
+  <text x="982" y="290" class="text-normal" text-anchor="middle" font-weight="bold" font-size="11">RandFor</text>
+  <text x="982" y="310" class="text-normal" text-anchor="middle" font-size="9">Trees</text>
+
+  <rect x="750" y="350" width="85" height="60" rx="8" class="box"/>
+  <text x="792" y="370" class="text-normal" text-anchor="middle" font-weight="bold" font-size="11">RNN</text>
+  <text x="792" y="390" class="text-normal" text-anchor="middle" font-size="9">Sequences</text>
+
+  <rect x="845" y="350" width="85" height="60" rx="8" class="box"/>
+  <text x="887" y="370" class="text-normal" text-anchor="middle" font-weight="bold" font-size="11">AdaBoost</text>
+  <text x="887" y="390" class="text-normal" text-anchor="middle" font-size="9">Boost</text>
+
+  <rect x="940" y="350" width="85" height="60" rx="8" class="box"/>
+  <text x="982" y="370" class="text-normal" text-anchor="middle" font-weight="bold" font-size="11">ARIMA</text>
+  <text x="982" y="390" class="text-normal" text-anchor="middle" font-size="9">TimeSeries</text>
+
+  <!-- Storage -->
+  <rect x="750" y="450" width="275" height="70" rx="8" class="box"/>
+  <text x="887" y="475" class="text-normal" text-anchor="middle" font-weight="bold">localStorage - Persistent User Data</text>
+  <text x="887" y="495" class="text-normal" text-anchor="middle" font-size="10">Portfolio, History, Settings</text>
+
+  <!-- Legend -->
+  <text x="50" y="750" font-size="10" fill="#666">Blue=Primary | Green=Streams | Orange=AI | Purple=Orders | Teal=Storage</text>
+  <text x="50" y="770" font-size="10" fill="#999">18+ Symbols | 15 Timeframes | 6 ML Models | 4 Market Categories</text>
+</svg>

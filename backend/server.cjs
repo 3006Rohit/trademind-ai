@@ -200,7 +200,7 @@ app.post('/api/user/sync', async (req, res) => {
 
 // START SERVER
 const PORT = process.env.PORT || 5000;
-mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
       app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })

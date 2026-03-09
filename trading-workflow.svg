@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1200 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #f0f4ff; stroke: #667eea; stroke-width: 2; }
+      .process { fill: #4ECDC4; stroke: #2B9D8F; stroke-width: 2; }
+      .decision { fill: #FFE66D; stroke: #B8A82D; stroke-width: 2; }
+      .success { fill: #52BE80; stroke: #2E7D4E; stroke-width: 2; }
+      .error { fill: #E74C3C; stroke: #A1251F; stroke-width: 2; }
+      .data { fill: #9B59B6; stroke: #6C3A7F; stroke-width: 2; }
+      .text-normal { font-size: 12px; fill: #333; }
+      .text-white { font-size: 12px; fill: white; font-weight: bold; }
+      .text-dark { font-size: 12px; fill: #000; }
+      .arrow { stroke: #667eea; stroke-width: 2; fill: none; marker-end: url(#arrow1); }
+      .arrow-success { stroke: #52BE80; stroke-width: 2; fill: none; marker-end: url(#arrow2); }
+      .arrow-error { stroke: #E74C3C; stroke-width: 2; fill: none; marker-end: url(#arrow3); }
+      .section-title { font-size: 20px; font-weight: bold; fill: #667eea; }
+    </style>
+    <marker id="arrow1" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#667eea" />
+    </marker>
+    <marker id="arrow2" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#52BE80" />
+    </marker>
+    <marker id="arrow3" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#E74C3C" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="600" y="30" class="section-title" text-anchor="middle" font-size="24">TradeMind AI - Trading Workflow</text>
+
+  <!-- WORKFLOW 1: Order Execution -->
+  <text x="50" y="70" class="section-title" font-size="16">Order Execution Flow</text>
+
+  <!-- Step 1 -->
+  <rect x="50" y="100" width="150" height="70" rx="8" class="process"/>
+  <text x="127" y="120" class="text-white" text-anchor="middle">User Reviews</text>
+  <text x="127" y="140" class="text-white" text-anchor="middle" font-size="11">Current Prices</text>
+  <text x="127" y="155" class="text-white" text-anchor="middle" font-size="11">in Chart</text>
+
+  <!-- Arrow -->
+  <path d="M 200 135 L 250 135" class="arrow"/>
+
+  <!-- Step 2 -->
+  <rect x="250" y="100" width="150" height="70" rx="8" class="process"/>
+  <text x="327" y="120" class="text-white" text-anchor="middle">Opens OrderPanel</text>
+  <text x="327" y="140" class="text-white" text-anchor="middle" font-size="11">Creates Order</text>
+  <text x="327" y="155" class="text-white" text-anchor="middle" font-size="11"></text>
+
+  <!-- Arrow to Decision -->
+  <path d="M 400 135 L 450 135" class="arrow"/>
+
+  <!-- Decision Diamond -->
+  <polygon points="520,135 600,100 680,135 600,170" class="decision" />
+  <text x="600" y="130" class="text-dark" text-anchor="middle" font-weight="bold" font-size="11">Market</text>
+  <text x="600" y="145" class="text-dark" text-anchor="middle" font-weight="bold" font-size="11">or Limit?</text>
+
+  <!-- Market Path -->
+  <path d="M 520 135 L 450 135 L 450 280 L 480 280" class="arrow-success"/>
+  <text x="470" y="205" font-size="10" fill="#52BE80" font-weight="bold">Market</text>
+
+  <rect x="480" y="250" width="150" height="70" rx="8" class="success"/>
+  <text x="555" y="270" class="text-white" text-anchor="middle" font-weight="bold">Execute at</text>
+  <text x="555" y="290" class="text-white" text-anchor="middle" font-size="11">Current Price</text>
+  <text x="555" y="305" class="text-white" text-anchor="middle" font-size="11">Immediately</text>
+
+  <!-- Limit Path -->
+  <path d="M 680 135 L 750 135 L 750 280 L 720 280" class="arrow"/>
+  <text x="740" y="205" font-size="10" fill="#667eea" font-weight="bold">Limit</text>
+
+  <rect x="550" y="250" width="150" height="70" rx="8" class="box"/>
+  <text x="625" y="270" class="text-normal" text-anchor="middle" font-weight="bold">Await Price</text>
+  <text x="625" y="290" class="text-normal" text-anchor="middle" font-size="11">Match or</text>
+  <text x="625" y="305" class="text-normal" text-anchor="middle" font-size="11">Cancellation</text>
+
+  <!-- Limit Cancel -->
+  <path d="M 625 320 L 625 360 L 450 360" class="arrow-error"/>
+  <rect x="350" y="340" width="100" height="40" rx="6" class="error"/>
+  <text x="400" y="365" class="text-white" text-anchor="middle" font-weight="bold" font-size="10">Cancelled</text>
+
+  <!-- Continue to Position Creation -->
+  <path d="M 555 320 L 555 360 L 555 400" class="arrow-success"/>
+  <path d="M 625 320 L 625 360 L 555 360" class="arrow-success"/>
+
+  <!-- Step 3: Create Position -->
+  <rect x="480" y="400" width="150" height="70" rx="8" class="success"/>
+  <text x="555" y="420" class="text-white" text-anchor="middle" font-weight="bold">Create Position</text>
+  <text x="555" y="440" class="text-white" text-anchor="middle" font-size="11">Entry Price</text>
+  <text x="555" y="455" class="text-white" text-anchor="middle" font-size="11">Current Price</text>
+
+  <!-- Arrow -->
+  <path d="M 555 470 L 555 510" class="arrow"/>
+
+  <!-- Step 4: Deduct Balance -->
+  <rect x="480" y="510" width="150" height="70" rx="8" class="process"/>
+  <text x="555" y="530" class="text-white" text-anchor="middle" font-weight="bold">Deduct from</text>
+  <text x="555" y="550" class="text-white" text-anchor="middle" font-size="11">Trading Balance</text>
+  <text x="555" y="565" class="text-white" text-anchor="middle" font-size="11">Update Account</text>
+
+  <!-- Arrow -->
+  <path d="M 555 580 L 555 620" class="arrow"/>
+
+  <!-- Step 5: Position Tracking -->
+  <rect x="480" y="620" width="150" height="70" rx="8" class="box"/>
+  <text x="555" y="640" class="text-normal" text-anchor="middle" font-weight="bold">Position Tracking</text>
+  <text x="555" y="660" class="text-normal" text-anchor="middle" font-size="11">Active in</text>
+  <text x="555" y="675" class="text-normal" text-anchor="middle" font-size="11">Portfolio View</text>
+
+  <!-- Decision: Close Position -->
+  <path d="M 555 690 L 555 730" class="arrow"/>
+  <polygon points="615,750 555,715 615,715 685,750 615,785 555,785" class="decision"/>
+  <text x="620" y="745" class="text-dark" text-anchor="middle" font-weight="bold" font-size="11">Close</text>
+  <text x="620" y="760" class="text-dark" text-anchor="middle" font-weight="bold" font-size="11">Position?</text>
+
+  <!-- Hold Position Loop -->
+  <path d="M 480 750 L 350 750 L 350 655 L 480 655" class="arrow"/>
+  <text x="380" y="700" font-size="10" fill="#667eea" font-weight="bold">No</text>
+
+  <!-- Close Position -->
+  <path d="M 685 750 L 750 750 L 750 620 L 630 620" class="arrow-success"/>
+  <text x="770" y="685" font-size="10" fill="#52BE80" font-weight="bold">Yes</text>
+
+  <!-- WORKFLOW 2: ML Predictions on Right Side -->
+  <text x="850" y="70" class="section-title" font-size="16">ML Prediction Workflow</text>
+
+  <!-- Input: OHLCV Data -->
+  <rect x="800" y="100" width="150" height="70" rx="8" class="data"/>
+  <text x="875" y="125" class="text-white" text-anchor="middle" font-weight="bold">OHLCV Data</text>
+  <text x="875" y="145" class="text-white" text-anchor="middle" font-size="11">Real-time Candles</text>
+  <text x="875" y="160" class="text-white" text-anchor="middle" font-size="11">Per Timeframe</text>
+
+  <!-- Arrow -->
+  <path d="M 875 170 L 875 210" class="arrow"/>
+
+  <!-- Process: Model Metrics -->
+  <rect x="800" y="210" width="150" height="70" rx="8" class="process"/>
+  <text x="875" y="230" class="text-white" text-anchor="middle" font-weight="bold">dataService</text>
+  <text x="875" y="250" class="text-white" text-anchor="middle" font-size="11">getModelMetrics</text>
+  <text x="875" y="265" class="text-white" text-anchor="middle" font-size="11">Extract Features</text>
+
+  <!-- Arrow -->
+  <path d="M 875 280 L 875 320" class="arrow"/>
+
+  <!-- 6 Models -->
+  <rect x="750" y="320" width="80" height="60" rx="8" class="box"/>
+  <text x="790" y="335" class="text-normal" text-anchor="middle" font-weight="bold" font-size="10">LSTM</text>
+  <text x="790" y="365" class="text-normal" text-anchor="middle" font-size="9">Deep Learn</text>
+
+  <rect x="840" y="320" width="80" height="60" rx="8" class="box"/>
+  <text x="880" y="335" class="text-normal" text-anchor="middle" font-weight="bold" font-size="10">XGBoost</text>
+  <text x="880" y="365" class="text-normal" text-anchor="middle" font-size="9">Ensemble</text>
+
+  <rect x="930" y="320" width="80" height="60" rx="8" class="box"/>
+  <text x="970" y="335" class="text-normal" text-anchor="middle" font-weight="bold" font-size="10">RandFor</text>
+  <text x="970" y="365" class="text-normal" text-anchor="middle" font-size="9">Trees</text>
+
+  <rect x="1020" y="320" width="80" height="60" rx="8" class="box"/>
+  <text x="1060" y="335" class="text-normal" text-anchor="middle" font-weight="bold" font-size="10">RNN</text>
+  <text x="1060" y="365" class="text-normal" text-anchor="middle" font-size="9">Sequence</text>
+
+  <!-- All models converge -->
+  <path d="M 790 380 L 875 420" class="arrow"/>
+  <path d="M 880 380 L 875 420" class="arrow"/>
+  <path d="M 970 380 L 875 420" class="arrow"/>
+  <path d="M 1060 380 L 875 420" class="arrow"/>
+
+  <!-- Prediction -->
+  <rect x="800" y="420" width="150" height="70" rx="8" class="success"/>
+  <text x="875" y="440" class="text-white" text-anchor="middle" font-weight="bold">Predict Next</text>
+  <text x="875" y="460" class="text-white" text-anchor="middle" font-size="11">Candle Close</text>
+  <text x="875" y="475" class="text-white" text-anchor="middle" font-size="11">Generate Signals</text>
+
+  <!-- Arrow -->
+  <path d="M 875 490 L 875 530" class="arrow"/>
+
+  <!-- Signals -->
+  <rect x="750" y="530" width="75" height="60" rx="8" class="success"/>
+  <text x="787" y="555" class="text-white" text-anchor="middle" font-weight="bold" font-size="11">STRONG BUY</text>
+
+  <rect x="835" y="530" width="75" height="60" rx="8" class="success"/>
+  <text x="872" y="555" class="text-white" text-anchor="middle" font-weight="bold" font-size="11">BUY</text>
+
+  <rect x="920" y="530" width="75" height="60" rx="8" class="box"/>
+  <text x="957" y="555" class="text-normal" text-anchor="middle" font-weight="bold" font-size="11">HOLD</text>
+
+  <rect x="1005" y="530" width="75" height="60" rx="8" class="error"/>
+  <text x="1042" y="555" class="text-white" text-anchor="middle" font-weight="bold" font-size="11">SELL</text>
+
+  <!-- All converge to MLPanel -->
+  <path d="M 787 590 L 875 620" class="arrow"/>
+  <path d="M 872 590 L 875 620" class="arrow"/>
+  <path d="M 957 590 L 875 620" class="arrow"/>
+  <path d="M 1042 590 L 875 620" class="arrow"/>
+
+  <!-- MLPanel Display -->
+  <rect x="800" y="620" width="150" height="70" rx="8" class="process"/>
+  <text x="875" y="640" class="text-white" text-anchor="middle" font-weight="bold">MLPanel Display</text>
+  <text x="875" y="660" class="text-white" text-anchor="middle" font-size="11">Show</text>
+  <text x="875" y="675" class="text-white" text-anchor="middle" font-size="11">Recommendations</text>
+
+  <!-- Arrow -->
+  <path d="M 875 690 L 875 730" class="arrow"/>
+
+  <!-- User Makes Decision -->
+  <rect x="800" y="730" width="150" height="70" rx="8" class="box"/>
+  <text x="875" y="750" class="text-normal" text-anchor="middle" font-weight="bold">User Decision</text>
+  <text x="875" y="770" class="text-normal" text-anchor="middle" font-size="11">Accept or</text>
+  <text x="875" y="785" class="text-normal" text-anchor="middle" font-size="11">Ignore Signals</text>
+
+  <!-- PnL Calculation -->
+  <path d="M 750 750 L 600 750 L 600 640 L 630 640" class="arrow-success"/>
+  <text x="660" y="690" font-size="10" fill="#52BE80" font-weight="bold">Calculate</text>
+
+  <!-- PnL Step -->
+  <rect x="480" y="620" width="150" height="70" rx="8" class="data"/>
+  <text x="555" y="640" class="text-white" text-anchor="middle" font-weight="bold">Calculate PnL</text>
+  <text x="555" y="660" class="text-white" text-anchor="middle" font-size="11">Qty x Price</text>
+  <text x="555" y="675" class="text-white" text-anchor="middle" font-size="11">Difference</text>
+
+  <!-- Arrow to Update Balance -->
+  <path d="M 555 690 L 555 730" class="arrow"/>
+
+  <!-- Update Balance -->
+  <rect x="480" y="730" width="150" height="70" rx="8" class="process"/>
+  <text x="555" y="750" class="text-white" text-anchor="middle" font-weight="bold">Update Balance</text>
+  <text x="555" y="770" class="text-white" text-anchor="middle" font-size="11">Add Profit or</text>
+  <text x="555" y="785" class="text-white" text-anchor="middle" font-size="11">Subtract Loss</text>
+
+  <!-- Final steps -->
+  <path d="M 555 800 L 555 840 L 400 840" class="arrow"/>
+  <rect x="300" y="820" width="100" height="40" rx="6" class="success"/>
+  <text x="350" y="845" class="text-white" text-anchor="middle" font-weight="bold" font-size="10">Complete</text>
+
+  <path d="M 400 840 L 340 840 L 340 660 L 480 660" class="arrow"/>
+  <text x="370" y="750" font-size="10" fill="#667eea" font-weight="bold">Persist</text>
+
+  <!-- Legend at bottom -->
+  <text x="50" y="880" font-size="11" fill="#667eea" font-weight="bold">Legend: </text>
+  <rect x="180" y="870" width="30" height="20" rx="4" class="process"/>
+  <text x="220" y="885" font-size="10" fill="#333">Process</text>
+  
+  <rect x="340" y="870" width="30" height="20" rx="4" class="decision"/>
+  <text x="380" y="885" font-size="10" fill="#333">Decision</text>
+
+  <rect x="510" y="870" width="30" height="20" rx="4" class="success"/>
+  <text x="550" y="885" font-size="10" fill="#333">Success</text>
+
+  <rect x="680" y="870" width="30" height="20" rx="4" class="data"/>
+  <text x="720" y="885" font-size="10" fill="#333">Data/State</text>
+</svg>

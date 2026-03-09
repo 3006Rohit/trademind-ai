@@ -1,5 +1,6 @@
 
 import { OHLCData, ModelMetric, Timeframe, Indicator, ModelType } from '../types';
+import { ALL_NSE_SYMBOLS, ALL_BSE_SYMBOLS, ALL_US_SYMBOLS, ALL_CRYPTO_PREFIXES, getBasePriceFromData } from '../data/stockData';
 
 // --- TIME & MARKET HELPERS ---
 
@@ -7,6 +8,213 @@ export const getISTTime = (): Date => {
   const now = new Date();
   const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
   return new Date(utc + (3600000 * 5.5)); // IST is UTC + 5:30
+};
+
+const US_STOCK_SYMBOLS = ALL_US_SYMBOLS;
+const CRYPTO_PREFIXES = ALL_CRYPTO_PREFIXES;
+
+export const getMarketCategoryFromSymbol = (symbol: string): string => {
+        if (symbol.endsWith('.BO') || ALL_BSE_SYMBOLS.includes(symbol)) return 'BSE';
+        if (CRYPTO_PREFIXES.some(prefix => symbol.startsWith(prefix)) && (symbol.endsWith('USD') || symbol.endsWith('INR') || symbol.endsWith('USDT'))) return 'CRYPTO';
+        if (US_STOCK_SYMBOLS.includes(symbol)) return 'US MARKETS';
+        // Forex: 6 char pairs or known patterns with USD/INR/etc.
+        if (symbol.length === 6 && (symbol.includes('USD') || symbol.includes('EUR') || symbol.includes('GBP') || symbol.includes('JPY') || symbol.includes('CHF') || symbol.includes('AUD') || symbol.includes('CAD') || symbol.includes('NZD') || symbol.includes('INR') || symbol.includes('SGD') || symbol.includes('HKD') || symbol.includes('TRY') || symbol.includes('MXN') || symbol.includes('ZAR') || symbol.includes('CNH') || symbol.includes('SEK') || symbol.includes('NOK') || symbol.includes('PLN') || symbol.includes('DKK') || symbol.includes('CZK') || symbol.includes('HUF') || symbol.includes('BRL') || symbol.includes('KRW') || symbol.includes('TWD') || symbol.includes('THB') || symbol.includes('IDR') || symbol.includes('MYR') || symbol.includes('PHP') || symbol.includes('AED') || symbol.includes('SAR') || symbol.includes('ARS') || symbol.includes('CLP'))) return 'FOREX';
+        return 'NSE';
+};
+
+const mapTimeframeToYahoo = (timeframe: Timeframe): { interval: string; range: string } => {
+    switch (timeframe) {
+        case Timeframe.S5:
+        case Timeframe.S10:
+        case Timeframe.S30:
+        case Timeframe.M1:
+            return { interval: '1m', range: '7d' };
+        case Timeframe.M5:
+            return { interval: '5m', range: '60d' };
+        case Timeframe.M15:
+            return { interval: '15m', range: '60d' };
+        case Timeframe.M30:
+            return { interval: '30m', range: '60d' };
+        case Timeframe.H1:
+        case Timeframe.H4:
+            return { interval: '60m', range: '730d' };
+        case Timeframe.D1:
+        case Timeframe.Y1:
+        case Timeframe.Y3:
+        case Timeframe.Y5:
+            return { interval: '1d', range: '10y' };
+        case Timeframe.W1:
+            return { interval: '1wk', range: '10y' };
+        case Timeframe.MO1:
+            return { interval: '1mo', range: '10y' };
+        default:
+            return { interval: '1m', range: '7d' };
+    }
+};
+
+const mapTimeframeToBinance = (timeframe: Timeframe): string => {
+    switch (timeframe) {
+        case Timeframe.M1: return '1m';
+        case Timeframe.M5: return '5m';
+        case Timeframe.M15: return '15m';
+        case Timeframe.M30: return '30m';
+        case Timeframe.H1: return '1h';
+        case Timeframe.H4: return '4h';
+        case Timeframe.D1: return '1d';
+        case Timeframe.W1: return '1w';
+        case Timeframe.MO1: return '1M';
+        default: return '1m';
+    }
+};
+
+const mapSymbolToYahoo = (symbol: string, category: string): string => {
+    if (category === 'NSE') return `${symbol}.NS`;
+    if (category === 'BSE') {
+        // BSE symbols already have .BO suffix in our data
+        if (symbol.endsWith('.BO')) return symbol;
+        return `${symbol}.BO`;
+    }
+    return symbol;
+};
+
+const withPredictions = (c: OHLCData): OHLCData => ({
+    ...c,
+    pred_lstm: c.close,
+    pred_xgboost: c.close,
+    pred_rf: c.close,
+});
+
+export const fetchHistoryFromYahooFinance = async (symbol: string, category: string, timeframe: Timeframe): Promise<OHLCData[]> => {
+    const mapped = mapSymbolToYahoo(symbol, category);
+    const { interval, range } = mapTimeframeToYahoo(timeframe);
+    const url = `/api/yahoo/v8/finance/chart/${encodeURIComponent(mapped)}?interval=${interval}&range=${range}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+    const result = data?.chart?.result?.[0];
+    const quote = result?.indicators?.quote?.[0];
+    const timestamps: number[] = result?.timestamp || [];
+
+    if (!result || !quote || !timestamps.length) {
+        throw new Error('Yahoo Finance returned empty chart data');
+    }
+
+    const candles: OHLCData[] = [];
+    for (let i = 0; i < timestamps.length; i++) {
+        const open = quote.open?.[i];
+        const high = quote.high?.[i];
+        const low = quote.low?.[i];
+        const close = quote.close?.[i];
+        if ([open, high, low, close].some(v => v == null)) continue;
+
+        candles.push(withPredictions({
+            time: timestamps[i] * 1000,
+            open: Number(open),
+            high: Number(high),
+            low: Number(low),
+            close: Number(close),
+            volume: Number(quote.volume?.[i] ?? 0),
+        }));
+    }
+
+    if (!candles.length) throw new Error('Yahoo Finance parsed 0 valid candles');
+    return candles;
+};
+
+export const fetchHistoryFromBinance = async (symbol: string, timeframe: Timeframe, limit: number = 500): Promise<OHLCData[]> => {
+    const pair = symbol.toUpperCase().replace('USD', 'USDT');
+    const interval = mapTimeframeToBinance(timeframe);
+    const url = `/api/binance/api/v3/klines?symbol=${pair}&interval=${interval}&limit=${limit}`;
+
+    const response = await fetch(url);
+    const rows = await response.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+        throw new Error('Binance returned empty kline data');
+    }
+
+    return rows.map((k: any[]) => {
+        const close = Number(k[4]);
+        return withPredictions({
+            time: Number(k[0]),
+            open: Number(k[1]),
+            high: Number(k[2]),
+            low: Number(k[3]),
+            close,
+            volume: Number(k[5]),
+        });
+    });
+};
+
+// --- DATA FETCHING (TWELVE DATA) ---
+export const fetchHistoryFromTwelveData = async (symbol: string, timeframe: Timeframe, apiKey: string): Promise<OHLCData[]> => {
+    // Map internal Timeframe to Twelve Data Interval
+    const intervalMap: Record<string, string> = {
+        '1m': '1min', '5m': '5min', '15m': '15min', '30m': '30min',
+        '1h': '1h', '4h': '4h', '1d': '1day', '1w': '1week'
+    };
+    const interval = intervalMap[timeframe] || '1min';
+
+    // Remove 'USD' suffix if needed for Forex pairs often requested as just base/quote (e.g. EUR/USD)
+    // But Twelve Data takes "EUR/USD" or just "AAPL".
+    let apiSymbol = symbol;
+    
+    // Indian Stocks (NSE) - Append .NS for NSE
+    if (ALL_NSE_SYMBOLS.includes(symbol)) {
+        apiSymbol = `${symbol}.NS`;
+    }
+    // Indian Stocks (BSE) - use .BO suffix
+    else if (symbol.endsWith('.BO')) {
+        apiSymbol = symbol;
+    } 
+    // Forex Handling
+    else if (symbol.length === 6 && !symbol.includes('/')) {
+        // Convert forex pairs like EURUSD -> EUR/USD
+        const category = getMarketCategoryFromSymbol(symbol);
+        if (category === 'FOREX') {
+             apiSymbol = symbol.substring(0, 3) + '/' + symbol.substring(3);
+        }
+    }
+
+    const url = `https://api.twelvedata.com/time_series?symbol=${apiSymbol}&interval=${interval}&apikey=${apiKey}&outputsize=200`;
+
+    const response = await fetch(url);
+    const result = await response.json();
+
+    if (result.status === 'error' || !result.values) {
+        throw new Error(result.message || 'Error fetching data');
+    }
+
+    // Transform API data to OHLCData
+    // Twelve Data returns newest first, so we reverse it.
+    console.log(`[DataService] Fetched ${result.values.length} candles for ${symbol}`);
+    
+    return result.values.reverse().map((candle: any) => withPredictions({
+        time: new Date(candle.datetime).getTime(),
+        open: parseFloat(candle.open),
+        high: parseFloat(candle.high),
+        low: parseFloat(candle.low),
+        close: parseFloat(candle.close),
+        volume: parseInt(candle.volume || '0', 10)
+    }));
+};
+
+export const fetchLatestForexPriceFromTwelveData = async (symbol: string, apiKey: string): Promise<number> => {
+    let apiSymbol = symbol;
+    if (symbol.length === 6 && !symbol.includes('/')) {
+        apiSymbol = `${symbol.substring(0, 3)}/${symbol.substring(3)}`;
+    }
+
+    const url = `https://api.twelvedata.com/price?symbol=${apiSymbol}&apikey=${apiKey}`;
+    const response = await fetch(url);
+    const result = await response.json();
+
+    if (result.status === 'error' || !result.price) {
+        throw new Error(result.message || 'Error fetching forex price');
+    }
+
+    const price = parseFloat(result.price);
+    if (Number.isNaN(price)) throw new Error('Invalid forex price payload');
+    return price;
 };
 
 export const getTimeframeConfig = (tf: Timeframe) => {
@@ -50,7 +258,7 @@ export const checkMarketStatus = (timestamp: number, category: string): boolean 
         return true;
     }
     
-    // For Indian markets and US markets, use timezone-aware checking
+    // For Indian markets, BSE, and US markets, use timezone-aware checking
     let timeZone = 'Asia/Kolkata';
     let openH = 9, openM = 15;
     let closeH = 15, closeM = 30;
@@ -313,34 +521,20 @@ function stringToSeed(str: string): number {
 // --- BASE DATA GENERATION ---
 
 export const getBasePriceForSymbol = (symbol: string): number => {
-    if (symbol.includes('JPY')) return 145;
-    if (symbol.includes('USD') && !symbol.includes('BTC') && !symbol.includes('ETH')) return 1.08;
-    if (symbol.startsWith('BTC')) return 65000;
-    if (symbol.startsWith('ETH')) return 3400;
-    if (symbol.startsWith('SOL')) return 145;
-    if (symbol === 'AAPL') return 180;
-    if (symbol === 'MSFT') return 400;
-    if (symbol === 'GOOGL') return 160;
-    if (symbol === 'AMZN') return 170;
-    if (symbol === 'TSLA') return 175;
-    if (symbol === 'RELIANCE') return 2900;
-    if (symbol === 'TCS') return 4000;
-    if (symbol === 'HDFCBANK') return 1450;
-    if (symbol === 'ASIANPAINT') return 2850;
-    return 2500;
+    return getBasePriceFromData(symbol);
 };
 
-export const updateCurrentCandle = (current: OHLCData, symbol: string): OHLCData => {
+export const updateCurrentCandle = (current: OHLCData, symbol: string, volatilityModifier: number = 1.0): OHLCData => {
     let volatilityFactor = 0.0002;
-    if (symbol.includes('USD') && !symbol.startsWith('BTC')) volatilityFactor = 0.00005;
-    if (symbol.startsWith('BTC')) volatilityFactor = 0.0008;
-    
-    let category = 'NIFTY 50';
-    if (symbol.includes('USD') && !symbol.includes('BTC')) category = 'FOREX';
-    if (symbol.startsWith('BTC')) category = 'CRYPTO';
+    const category = getMarketCategoryFromSymbol(symbol);
+    if (category === 'FOREX') volatilityFactor = 0.00005;
+    if (category === 'CRYPTO') volatilityFactor = 0.0008;
 
-    const isOpen = checkMarketStatus(getISTTime().getTime(), category);
+    const isOpen = checkMarketStatus(Date.now(), category);
     if (!isOpen) volatilityFactor = volatilityFactor * 0.4; 
+    
+    // Apply modifier (e.g. reduce volatility if we have real data backing it)
+    volatilityFactor *= volatilityModifier;
 
     const volatility = current.close * volatilityFactor;
     let change = (Math.random() - 0.5) * volatility;
@@ -359,11 +553,11 @@ export const updateCurrentCandle = (current: OHLCData, symbol: string): OHLCData
 
 // --- CORE GENERATION & SIMULATION ---
 
-const generateNextCandle = (prev: OHLCData, timestamp: number, symbol: string, category: string, rng?: () => number): OHLCData => {
+const generateNextCandle = (prev: OHLCData, timestamp: number, symbol: string, category: string, volatilityModifier: number = 1.0, rng?: () => number): OHLCData => {
   const random = rng || Math.random;
   let volatilityFactor = 0.001; 
-  if (symbol.includes('USD') && !symbol.startsWith('BTC')) volatilityFactor = 0.0003; 
-  if (symbol.startsWith('BTC')) volatilityFactor = 0.003; 
+    if (category === 'FOREX') volatilityFactor = 0.0003;
+    if (category === 'CRYPTO') volatilityFactor = 0.003;
 
   // Ensure timestamp is strictly greater than previous time
   const safeTimestamp = timestamp > prev.time ? timestamp : prev.time + 1;
@@ -371,6 +565,8 @@ const generateNextCandle = (prev: OHLCData, timestamp: number, symbol: string, c
   const isOpen = checkMarketStatus(safeTimestamp, category);
   // Always ensure some minimum volatility so prices move (don't reduce below 0.1x)
   if (!isOpen) volatilityFactor = volatilityFactor * 0.15; 
+  
+  volatilityFactor *= volatilityModifier;
 
   const intervalMs = safeTimestamp - prev.time;
   const timeScale = Math.sqrt(intervalMs / 60000);
@@ -413,7 +609,7 @@ export const generateInitialData = (count: number = 150, targetCurrentPrice: num
   const seed = stringToSeed(symbol);
   const rng = mulberry32(seed);
 
-  const now = getISTTime().getTime();
+    const now = Date.now();
   // Ensure we have enough space back from now
   let currentTime = now - (count * interval);
   
@@ -429,7 +625,7 @@ export const generateInitialData = (count: number = 150, targetCurrentPrice: num
     if (currentTime <= prev.time) {
       currentTime = prev.time + interval;
     }
-    const nextRaw = generateNextCandle(prev, currentTime, symbol, category, rng);
+    const nextRaw = generateNextCandle(prev, currentTime, symbol, category, 1.0, rng);
     data.push(nextRaw);
     prev = nextRaw;
   }
@@ -449,14 +645,11 @@ export const generateInitialData = (count: number = 150, targetCurrentPrice: num
   }));
 };
 
-export const getNextLiveCandle = (prev: OHLCData, history: OHLCData[], symbol: string, interval: number = 60000): OHLCData => {
+export const getNextLiveCandle = (prev: OHLCData, history: OHLCData[], symbol: string, interval: number = 60000, volatilityModifier: number = 1.0): OHLCData => {
   const nextTimestamp = prev.time + interval;
-  let category = 'NIFTY 50';
-  if (symbol.includes('USD')) category = 'FOREX';
-  if (symbol.startsWith('BTC')) category = 'CRYPTO';
-  if (['AAPL', 'MSFT', 'TSLA'].includes(symbol)) category = 'US MARKETS';
+    const category = getMarketCategoryFromSymbol(symbol);
 
-  return generateNextCandle(prev, nextTimestamp, symbol, category); 
+  return generateNextCandle(prev, nextTimestamp, symbol, category, volatilityModifier); 
 };
 
 // --- METRICS CALCULATION (SIMULATING 5-YEAR TRAINING) ---

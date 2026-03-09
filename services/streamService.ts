@@ -1,6 +1,7 @@
 
 import { OHLCData, Timeframe } from '../types';
-import { generateInitialData, updateCurrentCandle, getNextLiveCandle, getTimeframeConfig, getISTTime, checkMarketStatus } from './dataService';
+import { generateInitialData, updateCurrentCandle, getNextLiveCandle, getTimeframeConfig, checkMarketStatus, fetchHistoryFromTwelveData, fetchHistoryFromYahooFinance, fetchHistoryFromBinance, fetchLatestForexPriceFromTwelveData, getMarketCategoryFromSymbol, getBasePriceForSymbol } from './dataService';
+import { getApiKey } from './apiConfig';
 
 // This service acts as the client-side gateway to our data sources.
 type TickCallback = (candle: OHLCData, isNewCandle: boolean) => void;
@@ -19,30 +20,120 @@ class StreamService {
 
   constructor() {}
 
-  public subscribe(symbol: string, category: string, timeframe: Timeframe, callback: TickCallback) {
+  public async subscribe(symbol: string, category: string, timeframe: Timeframe, callback: TickCallback): Promise<OHLCData[]> {
     this.cleanup();
     this.symbol = symbol;
     this.marketCategory = category;
     this.timeframe = timeframe;
     this.subscribers.push(callback);
 
-    // Initialize Data
+    // Initialize Data (Fetch or Generate)
     const { interval, count } = getTimeframeConfig(timeframe);
     
-    let startPrice = this.getStartPrice(category, symbol);
-    this.history = generateInitialData(count, startPrice, symbol, category, interval);
-    this.currentCandle = this.history[this.history.length - 1];
+    // Fetch from requested providers by market category, fallback to simulation
+    const apiKey = getApiKey();
+    let fetchedData: OHLCData[] | null = null;
 
-    // Initial Callback with full history
-    callback(this.currentCandle, false);
+    try {
+        if (category === 'CRYPTO') {
+            console.log(`[StreamService] Fetching crypto history from Binance for ${symbol}`);
+            fetchedData = await fetchHistoryFromBinance(symbol, timeframe);
+        } else if (category === 'FOREX') {
+            if (!apiKey) throw new Error('Missing Twelve Data API key for FOREX');
+            console.log(`[StreamService] Fetching forex history from Twelve Data for ${symbol}`);
+            fetchedData = await fetchHistoryFromTwelveData(symbol, timeframe, apiKey);
+        } else if (category === 'US MARKETS' || category === 'NSE' || category === 'BSE') {
+            console.log(`[StreamService] Fetching stocks history from Yahoo Finance for ${symbol}`);
+            fetchedData = await fetchHistoryFromYahooFinance(symbol, category, timeframe);
+        }
+    } catch (error) {
+        console.warn('[StreamService] Provider fetch failed (using simulation fallback):', error);
+    }
+
+    if (fetchedData && fetchedData.length > 0) {
+        this.history = fetchedData;
+        this.currentCandle = this.history[this.history.length - 1];
+    } else {
+        // Fallback to simulation
+        let startPrice = this.getStartPrice(category, symbol);
+        this.history = generateInitialData(count, startPrice, symbol, category, interval);
+        this.currentCandle = this.history[this.history.length - 1];
+    }
+
+    // Initial Callback with current candle
+    if (this.currentCandle) {
+        callback(this.currentCandle, false);
+    }
 
     if (category === 'CRYPTO') {
         this.connectCryptoStream(symbol, timeframe);
+    } else if (category === 'FOREX' && fetchedData && apiKey) {
+        this.startForexQuoteStream(symbol, timeframe, apiKey);
+    } else if (fetchedData && (category === 'US MARKETS' || category === 'NSE' || category === 'BSE')) {
+        // If we have real fetched data, don't generate huge random swings. 
+        // Just small micro-movements to show the chart is "live".
+        // Use a smaller volatility factor.
+        this.startSimulationStream(interval, true); 
     } else {
-        this.startSimulationStream(interval);
+        this.startSimulationStream(interval, false);
     }
 
     return this.history;
+  }
+
+  private startForexQuoteStream(symbol: string, timeframe: Timeframe, apiKey: string) {
+      if (this.simulationInterval) return;
+
+      const { interval } = getTimeframeConfig(timeframe);
+      const pollMs = 20000; // 3 req/min, within most free-tier limits
+
+      this.simulationInterval = setInterval(async () => {
+          if (!this.currentCandle) return;
+          if (!checkMarketStatus(Date.now(), 'FOREX')) return;
+
+          try {
+              const price = await fetchLatestForexPriceFromTwelveData(symbol, apiKey);
+              const now = Date.now();
+              const currentBucket = Math.floor(now / interval) * interval;
+
+              let next: OHLCData;
+              let isNew = false;
+
+              if (this.currentCandle.time === currentBucket) {
+                  next = {
+                      ...this.currentCandle,
+                      close: price,
+                      high: Math.max(this.currentCandle.high, price),
+                      low: Math.min(this.currentCandle.low, price),
+                      volume: (this.currentCandle.volume || 0) + 1,
+                      pred_lstm: price,
+                      pred_xgboost: price,
+                      pred_rf: price,
+                  };
+              } else {
+                  this.history.push(this.currentCandle);
+                  if (this.history.length > 500) this.history.shift();
+
+                  next = {
+                      time: currentBucket,
+                      open: this.currentCandle.close,
+                      high: Math.max(this.currentCandle.close, price),
+                      low: Math.min(this.currentCandle.close, price),
+                      close: price,
+                      volume: 1,
+                      pred_lstm: price,
+                      pred_xgboost: price,
+                      pred_rf: price,
+                  };
+                  isNew = true;
+              }
+
+              this.currentCandle = next;
+              this.notifySubscribers(next, isNew);
+          } catch (error) {
+              console.warn('[StreamService] Forex quote poll failed:', error);
+          }
+      }, pollMs);
   }
 
   public getHistory() {
@@ -50,19 +141,7 @@ class StreamService {
   }
 
   private getStartPrice(category: string, symbol: string): number {
-    if (category === 'FOREX') {
-        if (symbol.includes('JPY')) return 145; 
-        return 1.08; 
-    } else if (category === 'CRYPTO') {
-        if (symbol.startsWith('BTC')) return 65000;
-        if (symbol.startsWith('ETH')) return 3400;
-        if (symbol.startsWith('SOL')) return 145;
-        if (symbol.startsWith('XRP')) return 0.60;
-        return 100;
-    } else if (category === 'US MARKETS') {
-        return 180;
-    } 
-    return 2500;
+    return getBasePriceForSymbol(symbol);
   }
 
   // --- REAL-TIME BINANCE WEBSOCKET INTEGRATION ---
@@ -77,7 +156,7 @@ class StreamService {
       const intervalStr = binanceIntervalMap[timeframe] || '1m';
       const wsUrl = `wss://stream.binance.com:9443/ws/${pair}@kline_${intervalStr}`;
 
-      console.log(`[Microservice] Connecting to Real-time Stream: ${wsUrl}`);
+      console.log(`[StreamService] Connecting to Real-time Stream: ${wsUrl}`);
 
       try {
           this.socket = new WebSocket(wsUrl);
@@ -143,22 +222,19 @@ class StreamService {
   }
 
   // --- SIMULATION STREAM (Fallback / Stock Markets) ---
-  private startSimulationStream(interval: number) {
+  private startSimulationStream(interval: number, isBasedOnRealData = false) {
       if (this.simulationInterval) return; // Already running
       
-      console.log(`[Microservice] Starting Simulation Stream for ${this.symbol}`);
+      console.log(`[StreamService] Starting Stream for ${this.symbol} (Real Data Mode: ${isBasedOnRealData})`);
       
       this.simulationInterval = setInterval(() => {
           if (!this.currentCandle) return;
 
-          const now = getISTTime().getTime();
+          const now = Date.now();
           const currentBucket = Math.floor(now / interval) * interval;
           
           // Check if market is open for this symbol (skip updates during market close for stocks)
-          let category = 'NIFTY 50';
-          if (this.symbol.includes('USD')) category = 'FOREX';
-          if (this.symbol.startsWith('BTC')) category = 'CRYPTO';
-          if (['AAPL', 'MSFT', 'TSLA'].includes(this.symbol)) category = 'US MARKETS';
+          const category = getMarketCategoryFromSymbol(this.symbol);
           
           // For non-crypto markets, don't update during market close
           if (category !== 'CRYPTO' && category !== 'FOREX' && !checkMarketStatus(now, category)) {
@@ -167,14 +243,18 @@ class StreamService {
           
           let updatedCandle: OHLCData;
           let isNew = false;
+          
+          // If based on real data, force the volatility to be extremely low so it looks realistic
+          // instead of random jumping.
+          const volatilityModifier = isBasedOnRealData ? 0.05 : 1.0; 
 
           if (this.currentCandle.time === currentBucket) {
-             updatedCandle = updateCurrentCandle(this.currentCandle, this.symbol);
+             updatedCandle = updateCurrentCandle(this.currentCandle, this.symbol, volatilityModifier);
           } else if (currentBucket > this.currentCandle.time) {
              this.history.push(this.currentCandle);
              if (this.history.length > 500) this.history.shift();
              
-             updatedCandle = getNextLiveCandle(this.currentCandle, this.history, this.symbol, interval);
+             updatedCandle = getNextLiveCandle(this.currentCandle, this.history, this.symbol, interval, volatilityModifier);
              updatedCandle.time = currentBucket;
              isNew = true;
           } else {
