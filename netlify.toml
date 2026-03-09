@@ -1,0 +1,23 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+
+# Redirect /api/yahoo/* and /api/binance/* to Netlify Functions
+[[redirects]]
+  from = "/api/yahoo/*"
+  to = "/.netlify/functions/yahoo-proxy/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/binance/*"
+  to = "/.netlify/functions/binance-proxy/:splat"
+  status = 200
+
+# SPA fallback - must be LAST
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
