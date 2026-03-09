@@ -1,7 +1,8 @@
 
 import { OHLCData, Timeframe } from '../types';
-import { generateInitialData, updateCurrentCandle, getNextLiveCandle, getTimeframeConfig, checkMarketStatus, fetchHistoryFromTwelveData, fetchHistoryFromYahooFinance, fetchHistoryFromBinance, fetchLatestForexPriceFromTwelveData, getMarketCategoryFromSymbol, getBasePriceForSymbol } from './dataService';
+import { generateInitialData, updateCurrentCandle, getNextLiveCandle, getTimeframeConfig, checkMarketStatus, fetchHistoryFromTwelveData, fetchHistoryFromYahooFinance, fetchHistoryFromBinance, fetchLatestForexPriceFromTwelveData, getMarketCategoryFromSymbol, getBasePriceForSymbol, fetchLivePriceForSymbol } from './dataService';
 import { getApiKey } from './apiConfig';
+import { updatePriceCache } from './priceService';
 
 // This service acts as the client-side gateway to our data sources.
 type TickCallback = (candle: OHLCData, isNewCandle: boolean) => void;
@@ -53,9 +54,21 @@ class StreamService {
     if (fetchedData && fetchedData.length > 0) {
         this.history = fetchedData;
         this.currentCandle = this.history[this.history.length - 1];
+        // Cache the latest live price from fetched data
+        if (this.currentCandle) {
+            updatePriceCache(symbol, this.currentCandle.close);
+        }
     } else {
-        // Fallback to simulation
-        let startPrice = this.getStartPrice(category, symbol);
+        // Fallback: try to get a live price from a simple API call,
+        // only use hardcoded price as a last resort
+        let startPrice: number;
+        try {
+            startPrice = await fetchLivePriceForSymbol(symbol, category);
+            console.log(`[StreamService] Got live price for simulation: ${symbol} = ${startPrice}`);
+        } catch {
+            startPrice = this.getStartPrice(category, symbol);
+            console.log(`[StreamService] Using cached/fallback price for simulation: ${symbol} = ${startPrice}`);
+        }
         this.history = generateInitialData(count, startPrice, symbol, category, interval);
         this.currentCandle = this.history[this.history.length - 1];
     }
@@ -193,6 +206,8 @@ class StreamService {
                     };
 
                     this.currentCandle = candle;
+                    // Keep price cache warm with live WebSocket data
+                    updatePriceCache(symbol, close);
                     this.notifySubscribers(candle, isNew || false);
                 }
               } catch (e) {

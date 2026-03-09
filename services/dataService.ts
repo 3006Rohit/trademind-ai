@@ -1,6 +1,7 @@
 
 import { OHLCData, ModelMetric, Timeframe, Indicator, ModelType } from '../types';
 import { ALL_NSE_SYMBOLS, ALL_BSE_SYMBOLS, ALL_US_SYMBOLS, ALL_CRYPTO_PREFIXES, getBasePriceFromData } from '../data/stockData';
+import { fetchLivePrice, getBestAvailablePrice, updatePriceCache } from './priceService';
 
 // --- TIME & MARKET HELPERS ---
 
@@ -118,6 +119,11 @@ export const fetchHistoryFromYahooFinance = async (symbol: string, category: str
     }
 
     if (!candles.length) throw new Error('Yahoo Finance parsed 0 valid candles');
+
+    // Update live price cache with the latest price from chart data
+    const lastCandle = candles[candles.length - 1];
+    if (lastCandle) updatePriceCache(symbol, lastCandle.close);
+
     return candles;
 };
 
@@ -132,7 +138,7 @@ export const fetchHistoryFromBinance = async (symbol: string, timeframe: Timefra
         throw new Error('Binance returned empty kline data');
     }
 
-    return rows.map((k: any[]) => {
+    const candles = rows.map((k: any[]) => {
         const close = Number(k[4]);
         return withPredictions({
             time: Number(k[0]),
@@ -143,6 +149,12 @@ export const fetchHistoryFromBinance = async (symbol: string, timeframe: Timefra
             volume: Number(k[5]),
         });
     });
+
+    // Update live price cache with the latest price from Binance data
+    const lastCandle = candles[candles.length - 1];
+    if (lastCandle) updatePriceCache(symbol, lastCandle.close);
+
+    return candles;
 };
 
 // --- DATA FETCHING (TWELVE DATA) ---
@@ -188,7 +200,7 @@ export const fetchHistoryFromTwelveData = async (symbol: string, timeframe: Time
     // Twelve Data returns newest first, so we reverse it.
     console.log(`[DataService] Fetched ${result.values.length} candles for ${symbol}`);
     
-    return result.values.reverse().map((candle: any) => withPredictions({
+    const candles = result.values.reverse().map((candle: any) => withPredictions({
         time: new Date(candle.datetime).getTime(),
         open: parseFloat(candle.open),
         high: parseFloat(candle.high),
@@ -196,6 +208,12 @@ export const fetchHistoryFromTwelveData = async (symbol: string, timeframe: Time
         close: parseFloat(candle.close),
         volume: parseInt(candle.volume || '0', 10)
     }));
+
+    // Update live price cache with the latest price from TwelveData
+    const lastCandle = candles[candles.length - 1];
+    if (lastCandle) updatePriceCache(symbol, lastCandle.close);
+
+    return candles;
 };
 
 export const fetchLatestForexPriceFromTwelveData = async (symbol: string, apiKey: string): Promise<number> => {
@@ -214,6 +232,8 @@ export const fetchLatestForexPriceFromTwelveData = async (symbol: string, apiKey
 
     const price = parseFloat(result.price);
     if (Number.isNaN(price)) throw new Error('Invalid forex price payload');
+    // Update live price cache
+    updatePriceCache(symbol, price);
     return price;
 };
 
@@ -520,8 +540,21 @@ function stringToSeed(str: string): number {
 
 // --- BASE DATA GENERATION ---
 
+/**
+ * Synchronous price getter: returns cached live price or hardcoded fallback.
+ * For the async version that fetches from APIs, use fetchLivePriceForSymbol.
+ */
 export const getBasePriceForSymbol = (symbol: string): number => {
-    return getBasePriceFromData(symbol);
+    return getBestAvailablePrice(symbol);
+};
+
+/**
+ * Async price getter: fetches price from live APIs (Yahoo/Binance/TwelveData)
+ * with caching. Falls back to hardcoded price only on API failure.
+ */
+export const fetchLivePriceForSymbol = async (symbol: string, category?: string): Promise<number> => {
+    const cat = category || getMarketCategoryFromSymbol(symbol);
+    return fetchLivePrice(symbol, cat);
 };
 
 export const updateCurrentCandle = (current: OHLCData, symbol: string, volatilityModifier: number = 1.0): OHLCData => {
