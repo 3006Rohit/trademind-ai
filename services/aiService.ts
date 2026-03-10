@@ -3,29 +3,7 @@ import { SentimentAnalysisResult, OHLCData, MarketReport, FundamentalsReport } f
 
 // Initialize the Gemini API client safely
 const getAIClient = () => {
-  let apiKey = '';
-
-  // Safe Environment Variable Access
-  // We prioritize process.env which is standard for most React bundlers (CRA, Webpack)
-  try {
-    // @ts-ignore
-    if (typeof process !== 'undefined' && process.env) {
-      apiKey = process.env.API_KEY || process.env.REACT_APP_API_KEY || '';
-    }
-  } catch (e) {}
-
-  // If you are using Vite and strictly require import.meta.env, ensure your tsconfig handles it.
-  // For maximum compatibility in this shared environment, we avoid direct 'import.meta' calls 
-  // if they are causing syntax errors in standard builds.
-
-  if (!apiKey) {
-    // Attempt to read from global window object if injected there
-    // @ts-ignore
-    if (typeof window !== 'undefined' && window.ENV && window.ENV.API_KEY) {
-        // @ts-ignore
-        apiKey = window.ENV.API_KEY;
-    }
-  }
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 
   if (!apiKey) {
     console.warn("API_KEY not found in environment. AI features will be disabled.");
@@ -113,10 +91,10 @@ export const generateMarketReport = async (symbol: string, data: OHLCData[]): Pr
         `Time: ${new Date(d.time).toLocaleTimeString()}, Open: ${d.open.toFixed(2)}, High: ${d.high.toFixed(2)}, Low: ${d.low.toFixed(2)}, Close: ${d.close.toFixed(2)}, Vol: ${d.volume}`
     ).join('\n');
 
-    // 2. Configure Model (Gemini 3 Pro for Complex Reasoning)
-    const model = "gemini-3-pro-preview";
+    // 2. Configure Model
+    const model = "gemini-2.5-flash";
     
-    const prompt = `You are an expert quantitative financial analyst using the Gemini 3 Pro reasoning engine.
+    const prompt = `You are an expert quantitative financial analyst.
     
     I will provide you with the recent OHLCV (Open, High, Low, Close, Volume) data for ${symbol}.
     
@@ -135,7 +113,6 @@ export const generateMarketReport = async (symbol: string, data: OHLCData[]): Pr
         model,
         contents: prompt,
         config: {
-            tools: [{ googleSearch: {} }],
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
@@ -171,7 +148,7 @@ export const generateFundamentalsReport = async (symbol: string, documentUrls: s
     if (!ai) return null;
   
     try {
-      const model = "gemini-3-pro-preview";
+      const model = "gemini-2.5-flash";
       
       const prompt = `Act as a senior financial auditor.
       Target Stock: ${symbol}
@@ -193,7 +170,6 @@ export const generateFundamentalsReport = async (symbol: string, documentUrls: s
           model,
           contents: prompt,
           config: {
-              tools: [{ googleSearch: {} }],
               responseMimeType: "application/json",
               responseSchema: {
                   type: Type.OBJECT,
