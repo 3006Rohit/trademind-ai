@@ -58,7 +58,9 @@ const MLPanel: React.FC<MLPanelProps> = ({ metrics, sentiment, loadingSentiment,
     setLoadingFundamentals(false);
   };
 
-  const bestModel = metrics.length > 0 ? metrics.reduce((prev, current) => (current.r2 > prev.r2 ? current : prev)) : null;
+  const bestModel = metrics.length > 0 ? metrics.reduce((prev, current) => (
+      (current.rmse < prev.rmse || (current.rmse === prev.rmse && current.mae < prev.mae)) ? current : prev
+  )) : null;
   const technicalSignals = getTechnicalSignals(data, activeIndicators);
   const trainingSize = timeframe ? calculateTrainingDataSize(timeframe) : 0;
 
@@ -97,9 +99,9 @@ const MLPanel: React.FC<MLPanelProps> = ({ metrics, sentiment, loadingSentiment,
   if (isTraining) {
       const steps = [
           "Fetching 5-Year Historical Data...",
-          `Splitting ${trainingSize.toLocaleString()} samples (80% Train / 20% Test)...`,
-          "Retraining LSTM, RNN, XGBoost on new split...",
-          "Finalizing Ensemble Weights..."
+          `Preparing ${trainingSize.toLocaleString()} samples for inference...`,
+          "Loading Hugging Face pretrained models...",
+          "Finalizing model forecasts..."
       ];
 
       return (
@@ -180,7 +182,7 @@ const MLPanel: React.FC<MLPanelProps> = ({ metrics, sentiment, loadingSentiment,
                          <h2 className="text-2xl font-bold text-trade-text">Best Model: {bestModel.name}</h2>
                          <p className="text-trade-text-muted text-sm max-w-md leading-relaxed">
                             Trained on <span className="text-trade-text font-bold">{trainingSize.toLocaleString()} samples</span> (5 Years). 
-                            The {bestModel.type} model currently outperforms other models (incl. ARIMA, AdaBoost) with an R² of {bestModel.r2} and <span className="text-green-400 font-bold">{(bestModel.r2 * 100).toFixed(1)}% confidence</span>.
+                            The {bestModel.type} model currently has the lowest error with <span className="text-green-400 font-bold">RMSE {bestModel.rmse}</span> and <span className="text-blue-300 font-bold">MAE {bestModel.mae}</span>.
                          </p>
                     </div>
                     <div className="flex items-center gap-8">
@@ -225,14 +227,14 @@ const MLPanel: React.FC<MLPanelProps> = ({ metrics, sentiment, loadingSentiment,
                                         <span className="text-trade-text font-mono">{m.nextPrice?.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between text-xs">
-                                        <span className="text-trade-text-muted">Confidence</span>
-                                        <span className={`font-mono ${(m.r2 * 100) >= 80 ? 'text-green-400' : 'text-blue-400'}`}>
-                                            {(m.r2 * 100).toFixed(1)}%
+                                        <span className="text-trade-text-muted">RMSE</span>
+                                        <span className="font-mono text-green-400">
+                                            {m.rmse}
                                         </span>
                                     </div>
                                     <div className="flex justify-between text-xs">
-                                        <span className="text-trade-text-muted">RMSE</span>
-                                        <span className="text-trade-text-muted">${m.rmse}</span>
+                                        <span className="text-trade-text-muted">MAE</span>
+                                        <span className="text-trade-text-muted">{m.mae}</span>
                                     </div>
                                 </div>
                             </div>
@@ -307,11 +309,10 @@ const MLPanel: React.FC<MLPanelProps> = ({ metrics, sentiment, loadingSentiment,
                             <tr>
                                 <th className="px-4 py-3">Model Name</th>
                                 <th className="px-4 py-3">Type</th>
-                                <th className="px-4 py-3 text-right">R² Score</th>
-                                <th className="px-4 py-3 text-right">Confidence</th>
                                 <th className="px-4 py-3 text-right">Forecast</th>
                                 <th className="px-4 py-3 text-right">RMSE ($)</th>
                                 <th className="px-4 py-3 text-right">MAE ($)</th>
+                                <th className="px-4 py-3 text-right">R2 Score</th>
                                 <th className="px-4 py-3 text-center">Rec.</th>
                             </tr>
                         </thead>
@@ -323,11 +324,10 @@ const MLPanel: React.FC<MLPanelProps> = ({ metrics, sentiment, loadingSentiment,
                                         {m.name}
                                     </td>
                                     <td className="px-4 py-3 text-trade-text-muted">{m.type}</td>
-                                    <td className="px-4 py-3 text-right font-mono text-trade-text">{m.r2.toFixed(2)}</td>
-                                    <td className="px-4 py-3 text-right font-mono text-blue-300">{(m.r2 * 100).toFixed(1)}%</td>
                                     <td className="px-4 py-3 text-right font-mono text-trade-accent font-bold">{m.nextPrice?.toFixed(2)}</td>
                                     <td className="px-4 py-3 text-right font-mono text-trade-text-muted">{m.rmse}</td>
                                     <td className="px-4 py-3 text-right font-mono text-trade-text-muted">{m.mae}</td>
+                                    <td className="px-4 py-3 text-right font-mono text-trade-text">{m.r2.toFixed(2)}</td>
                                     <td className="px-4 py-3 text-center">
                                         <RecommendationBadge rec={m.recommendation} />
                                     </td>
@@ -670,3 +670,4 @@ const MLPanel: React.FC<MLPanelProps> = ({ metrics, sentiment, loadingSentiment,
 };
 
 export default MLPanel;
+

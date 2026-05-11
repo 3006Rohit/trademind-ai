@@ -6,7 +6,7 @@ export interface OHLCData {
   low: number;
   close: number;
   volume: number;
-  // Predictions (still hardcoded for ML demo)
+  // Model predictions
   pred_lstm?: number;
   pred_xgboost?: number;
   pred_rf?: number;

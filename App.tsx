@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { OHLCData, ChartConfig, StockSymbol, ModelMetric, SentimentAnalysisResult, Position, PositionType, Drawing, Timeframe, Trade, OrderType, PortfolioSuggestion, PortfolioSuggestionItem } from './types';
-import { getModelMetrics, getTimeframeConfig, getSnapshotPrice, checkMarketStatus, getMarketCategoryFromSymbol, fetchHistoryFromYahooFinance, fetchHistoryFromBinance, fetchHistoryFromTwelveData } from './services/dataService';
+import { getTimeframeConfig, getSnapshotPrice, checkMarketStatus, getMarketCategoryFromSymbol, fetchHistoryFromYahooFinance, fetchHistoryFromBinance, fetchHistoryFromTwelveData } from './services/dataService';
+import { getPretrainedModelMetrics } from './services/huggingFaceModelService';
 import { streamService } from './services/streamService'; 
 import { analyzeStockSentiment } from './services/aiService';
 import { useAuth } from './contexts/AuthContext';
@@ -149,7 +150,9 @@ const App: React.FC = () => {
                 const newData = [...prev.slice(1), candle];
                 // Only update metrics if NOT in training mode (training finishes via timeout below)
                 if (!isTrainingModels) {
-                    setMetrics(getModelMetrics(symbol.symbol, newData, chartConfig.timeframe));
+                    getPretrainedModelMetrics(symbol.symbol, newData, chartConfig.timeframe).then(latestMetrics => {
+                        if (isMounted) setMetrics(latestMetrics);
+                    });
                 }
                 return newData;
             } else {
@@ -176,8 +179,11 @@ const App: React.FC = () => {
         const trainingTime = Math.random() * 800 + 1200; // 1.2s - 2s
         const trainingTimeout = setTimeout(() => {
             if (!isMounted) return;
-            setMetrics(getModelMetrics(symbol.symbol, initialHistory, chartConfig.timeframe));
-            setIsTrainingModels(false);
+            getPretrainedModelMetrics(symbol.symbol, initialHistory, chartConfig.timeframe).then(latestMetrics => {
+                if (!isMounted) return;
+                setMetrics(latestMetrics);
+                setIsTrainingModels(false);
+            });
         }, trainingTime);
     });
 

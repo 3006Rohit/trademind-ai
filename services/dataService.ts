@@ -2,6 +2,8 @@
 import { OHLCData, ModelMetric, Timeframe, Indicator, ModelType } from '../types';
 import { ALL_NSE_SYMBOLS, ALL_BSE_SYMBOLS, ALL_US_SYMBOLS, ALL_CRYPTO_PREFIXES, getBasePriceFromData } from '../data/stockData';
 import { fetchLivePrice, getBestAvailablePrice, updatePriceCache } from './priceService';
+import { predictNextCloseWithPretrainedLstm } from './lstmPredictionService';
+import { getBacktestedModelStats, getLocalPretrainedPredictions } from './huggingFaceModelService';
 
 // --- TIME & MARKET HELPERS ---
 
@@ -80,10 +82,20 @@ const mapSymbolToYahoo = (symbol: string, category: string): string => {
 
 const withPredictions = (c: OHLCData): OHLCData => ({
     ...c,
-    pred_lstm: c.close,
-    pred_xgboost: c.close,
-    pred_rf: c.close,
+    ...getLocalPretrainedPredictions([c]),
 });
+
+const applyPretrainedPredictions = (candles: OHLCData[]): OHLCData[] => {
+    const history: OHLCData[] = [];
+    return candles.map(candle => {
+        const enriched = {
+            ...candle,
+            ...getLocalPretrainedPredictions(history, candle),
+        };
+        history.push(enriched);
+        return enriched;
+    });
+};
 
 export const fetchHistoryFromYahooFinance = async (symbol: string, category: string, timeframe: Timeframe): Promise<OHLCData[]> => {
     const mapped = mapSymbolToYahoo(symbol, category);
@@ -124,7 +136,7 @@ export const fetchHistoryFromYahooFinance = async (symbol: string, category: str
     const lastCandle = candles[candles.length - 1];
     if (lastCandle) updatePriceCache(symbol, lastCandle.close);
 
-    return candles;
+    return applyPretrainedPredictions(candles);
 };
 
 export const fetchHistoryFromBinance = async (symbol: string, timeframe: Timeframe, limit: number = 500): Promise<OHLCData[]> => {
@@ -154,7 +166,7 @@ export const fetchHistoryFromBinance = async (symbol: string, timeframe: Timefra
     const lastCandle = candles[candles.length - 1];
     if (lastCandle) updatePriceCache(symbol, lastCandle.close);
 
-    return candles;
+    return applyPretrainedPredictions(candles);
 };
 
 // --- DATA FETCHING (TWELVE DATA) ---
@@ -213,7 +225,7 @@ export const fetchHistoryFromTwelveData = async (symbol: string, timeframe: Time
     const lastCandle = candles[candles.length - 1];
     if (lastCandle) updatePriceCache(symbol, lastCandle.close);
 
-    return candles;
+    return applyPretrainedPredictions(candles);
 };
 
 export const fetchLatestForexPriceFromTwelveData = async (symbol: string, apiKey: string): Promise<number> => {
@@ -586,7 +598,7 @@ export const updateCurrentCandle = (current: OHLCData, symbol: string, volatilit
 
 // --- CORE GENERATION & SIMULATION ---
 
-const generateNextCandle = (prev: OHLCData, timestamp: number, symbol: string, category: string, volatilityModifier: number = 1.0, rng?: () => number): OHLCData => {
+const generateNextCandle = (prev: OHLCData, timestamp: number, symbol: string, category: string, volatilityModifier: number = 1.0, rng?: () => number, history: OHLCData[] = []): OHLCData => {
   const random = rng || Math.random;
   let volatilityFactor = 0.001; 
     if (category === 'FOREX') volatilityFactor = 0.0003;
@@ -612,28 +624,15 @@ const generateNextCandle = (prev: OHLCData, timestamp: number, symbol: string, c
   const low = Math.min(open, close) - (random() * volatility * 0.5);
   const volume = Math.floor(random() * (isOpen ? 1000 : 100) * timeScale);
 
-  const momentum = close - open; 
-  const noise = () => (random() - 0.5) * volatility;
+  const candle: OHLCData = {
+    time: safeTimestamp, open, high, low, close, volume,
+  };
+
+  const predictionHistory = history[history.length - 1]?.time === prev.time ? history : [...history, prev];
 
   return {
-    time: safeTimestamp, open, high, low, close, volume,
-    // LSTM: Smooth, trend-following, learns from recent history well
-    pred_lstm: close + (momentum * 0.8) + (noise() * 0.3),
-    
-    // XGBoost: Sharp, reactive to volatility, overfits slightly
-    pred_xgboost: close + (momentum * 0.6) + (noise() * 0.6),
-    
-    // Random Forest: Ensemble average, often conservative but stable
-    pred_rf: close + (momentum * 0.5) + (noise() * 0.4),
-    
-    // RNN: Captures sequential dependencies but slightly simpler/noisier than LSTM
-    pred_rnn: close + (momentum * 0.75) + (noise() * 0.5),
-    
-    // AdaBoost: Focuses on hard-to-classify points, can be erratic in high vol
-    pred_adaboost: close + (momentum * 1.1) + (noise() * 0.8),
-    
-    // ARIMA: Statistical, mean-reverting, often predicts reversal after big moves
-    pred_arima: close - (momentum * 0.2) + (noise() * 0.2), 
+    ...candle,
+    ...getLocalPretrainedPredictions(predictionHistory, candle),
   };
 };
 
@@ -658,7 +657,7 @@ export const generateInitialData = (count: number = 150, targetCurrentPrice: num
     if (currentTime <= prev.time) {
       currentTime = prev.time + interval;
     }
-    const nextRaw = generateNextCandle(prev, currentTime, symbol, category, 1.0, rng);
+    const nextRaw = generateNextCandle(prev, currentTime, symbol, category, 1.0, rng, data);
     data.push(nextRaw);
     prev = nextRaw;
   }
@@ -682,7 +681,7 @@ export const getNextLiveCandle = (prev: OHLCData, history: OHLCData[], symbol: s
   const nextTimestamp = prev.time + interval;
     const category = getMarketCategoryFromSymbol(symbol);
 
-  return generateNextCandle(prev, nextTimestamp, symbol, category, volatilityModifier); 
+  return generateNextCandle(prev, nextTimestamp, symbol, category, volatilityModifier, undefined, history); 
 };
 
 // --- METRICS CALCULATION (SIMULATING 5-YEAR TRAINING) ---
@@ -724,21 +723,34 @@ export const getModelMetrics = (symbol: string, data: OHLCData[], timeframe: Tim
         let r2 = m.baseR2 - volatilityPenalty + variance;
         r2 = Math.min(0.995, Math.max(0.5, parseFloat(r2.toFixed(3))));
         
-        const errorFactor = 0.05 * (1 - r2) * (0.8 + modelRng() * 0.4);
-        const mae = parseFloat((currentPrice * errorFactor).toFixed(2));
-        const rmse = parseFloat((mae * 1.25).toFixed(2));
-        const mape = (errorFactor * 100).toFixed(2) + '%';
+        const backtest = getBacktestedModelStats(m.name, data);
+        const mae = backtest.mae || parseFloat((currentPrice * 0.01).toFixed(2));
+        const rmse = backtest.rmse || parseFloat((mae * 1.25).toFixed(2));
+        const mape = backtest.mape;
         
-        const volatilityMult = m.type === 'Statistical' ? 0.005 : 0.015;
-        const nextPrice = parseFloat((currentPrice * (1 + (modelRng() - 0.5) * volatilityMult)).toFixed(2));
+        const localPredictions = getLocalPretrainedPredictions(data);
+        const modelNextPrice =
+            m.name.startsWith('LSTM') ? localPredictions.pred_lstm :
+            m.name.startsWith('RNN') ? localPredictions.pred_rnn :
+            m.name === 'XGBoost' ? localPredictions.pred_xgboost :
+            m.name === 'Random Forest' ? localPredictions.pred_rf :
+            m.name === 'AdaBoost' ? localPredictions.pred_adaboost :
+            m.name === 'ARIMA' ? localPredictions.pred_arima :
+            predictNextCloseWithPretrainedLstm(data);
+        const nextPrice = parseFloat((modelNextPrice ?? currentPrice).toFixed(2));
         
         const percentChange = (nextPrice - currentPrice) / currentPrice;
+        const errorRatio = (rmse || mae || 0) / Math.max(Math.abs(currentPrice), 1e-9);
         
         let recommendation: any = 'Hold';
-        if (percentChange > 0.005) recommendation = 'Strong Buy';
-        else if (percentChange > 0.0015) recommendation = 'Buy';
-        else if (percentChange < -0.005) recommendation = 'Strong Sell';
-        else if (percentChange < -0.0015) recommendation = 'Sell';
+        if (errorRatio <= 0.03) {
+            const strongThreshold = errorRatio <= 0.01 ? 0.005 : 0.008;
+            const signalThreshold = errorRatio <= 0.015 ? 0.0015 : 0.003;
+            if (percentChange > strongThreshold) recommendation = 'Strong Buy';
+            else if (percentChange > signalThreshold) recommendation = 'Buy';
+            else if (percentChange < -strongThreshold) recommendation = 'Strong Sell';
+            else if (percentChange < -signalThreshold) recommendation = 'Sell';
+        }
         
         let color = '#ff9800'; 
         if (recommendation.includes('Buy')) color = '#089981';
@@ -747,7 +759,7 @@ export const getModelMetrics = (symbol: string, data: OHLCData[], timeframe: Tim
         return {
             name: m.name, 
             type: m.type as ModelType, 
-            r2, 
+            r2,
             mae, 
             rmse, 
             mape, 
@@ -756,7 +768,7 @@ export const getModelMetrics = (symbol: string, data: OHLCData[], timeframe: Tim
             nextPrice, 
             forecastLabel
         };
-    }).sort((a, b) => b.r2 - a.r2); 
+    }).sort((a, b) => (a.rmse - b.rmse) || (a.mae - b.mae)); 
 };
 
 export const getSnapshotPrice = (symbol: string): number => {

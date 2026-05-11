@@ -27,6 +27,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
   const indicatorSeriesRefs = useRef<Map<string, ISeriesApi<any> | any>>(new Map());
   
   const overlayRef = useRef<HTMLDivElement>(null);
+  const dataRef = useRef<OHLCData[]>([]);
   const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentDrawing, setCurrentDrawing] = useState<Partial<Drawing> | null>(null);
@@ -35,6 +36,16 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
   // Hover Tooltip State
   const [hoveredCandle, setHoveredCandle] = useState<OHLCData | null>(null);
   const [cursorPos, setCursorPos] = useState<{ x: number, y: number } | null>(null);
+
+  const toChartTime = useCallback((timestampMs: number): number => {
+      const timestampSeconds = Math.floor(timestampMs / 1000);
+      const localOffsetSeconds = -new Date(timestampMs).getTimezoneOffset() * 60;
+      return timestampSeconds + localOffsetSeconds;
+  }, []);
+
+  useEffect(() => {
+      dataRef.current = data;
+  }, [data]);
 
   // --- 1. CHART INITIALIZATION (Run Once) ---
   useEffect(() => {
@@ -111,6 +122,9 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
 
         // Store cursor position for the react tooltip
         setCursorPos({ x: param.point.x, y: param.point.y });
+        const hoveredTime = param.time as number;
+        const candle = dataRef.current.find(d => toChartTime(d.time) === hoveredTime);
+        setHoveredCandle(candle || null);
     });
 
     return () => {
@@ -123,7 +137,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
       volumeSeriesRef.current = null;
       indicatorSeriesRefs.current.clear();
     };
-  }, []); // Empty dependency array = Runs once on mount
+  }, [toChartTime]);
 
   // --- THEME UPDATE EFFECT ---
   useEffect(() => {
@@ -221,11 +235,10 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
 
         // Prepare data for Lightweight Charts (Time must be in seconds as integers)
         const mainData = sortedData.map((d, index) => {
-            // Round to integer seconds and ensure uniqueness
-            let time = Math.floor(d.time / 1000);
+            let time = toChartTime(d.time);
             // Ensure strictly ascending by adding index if needed
-            if (index > 0 && time <= Math.floor(sortedData[index - 1].time / 1000)) {
-                time = Math.floor(sortedData[index - 1].time / 1000) + 1;
+            if (index > 0 && time <= toChartTime(sortedData[index - 1].time)) {
+                time = toChartTime(sortedData[index - 1].time) + 1;
             }
             const timeValue = time as Time;
             if (config.chartType === 'line' || config.chartType === 'area') {
@@ -237,9 +250,9 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
         const volData = config.showVolume 
             ? sortedData.map((d, index) => {
                 // Use same time conversion as main data for consistency
-                let time = Math.floor(d.time / 1000);
-                if (index > 0 && time <= Math.floor(sortedData[index - 1].time / 1000)) {
-                    time = Math.floor(sortedData[index - 1].time / 1000) + 1;
+                let time = toChartTime(d.time);
+                if (index > 0 && time <= toChartTime(sortedData[index - 1].time)) {
+                    time = toChartTime(sortedData[index - 1].time) + 1;
                 }
                 return { 
                     time: time as Time, 
@@ -259,7 +272,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
             const posMarkers = activePositionsForSymbol
                 .filter(p => p.timestamp)
                 .map(p => ({
-                    time: Math.floor(p.timestamp / 1000) as Time,
+                    time: toChartTime(p.timestamp) as Time,
                     position: p.type === 'Buy' ? 'belowBar' : 'aboveBar',
                     color: p.type === 'Buy' ? '#089981' : '#f23645',
                     shape: p.type === 'Buy' ? 'arrowUp' : 'arrowDown',
@@ -274,7 +287,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
     } catch (e) { 
         console.warn("Chart update error:", e); 
     }
-  }, [data, config.chartType, config.showVolume, positions, symbol]);
+  }, [data, config.chartType, config.showVolume, positions, symbol, toChartTime]);
 
   // Effect to run data update when dependencies change
   useEffect(() => {
@@ -346,6 +359,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
                 for (let i = 0; i < arr.length; i++) {
                     let time = arr[i].time;
                     if (typeof time !== 'number') time = parseInt(time as string);
+                    time = toChartTime(time * 1000);
                     if (time <= lastTime) {
                         time = lastTime + 1;
                     }
@@ -375,7 +389,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
             console.warn(`Error updating indicator ${ind.type}:`, e);
         }
     });
-  }, [config.activeIndicators, data]);
+  }, [config.activeIndicators, data, toChartTime]);
 
     // --- CANDLE TIMER ---
   useEffect(() => {
@@ -402,7 +416,8 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
   };
   const getScreenCoordinates = (time: number, price: number) => {
       if (!chartRef.current || !mainSeriesRef.current) return null;
-      const x = chartRef.current.timeScale().timeToCoordinate(time as Time);
+      const normalizedTime = time > 100000000000 ? toChartTime(time) : time;
+      const x = chartRef.current.timeScale().timeToCoordinate(normalizedTime as Time);
       const y = mainSeriesRef.current.priceToCoordinate(price);
       return { x, y };
   };
@@ -444,11 +459,11 @@ const TradingChart: React.FC<TradingChartProps> = ({ data, config, symbol, posit
   useEffect(() => {
     if (cursorPos && chartRef.current) {
        if (hoveredCandle) {
-           const updated = data.find(d => Math.floor(d.time/1000) === (hoveredCandle.time as any)); // rough check
+           const updated = data.find(d => toChartTime(d.time) === toChartTime(hoveredCandle.time));
            if (updated) setHoveredCandle(updated);
        }
     }
-  }, [data]);
+  }, [data, cursorPos, hoveredCandle, toChartTime]);
 
   const renderDrawing = (d: Partial<Drawing>, isPreview = false) => {
       if (!d.startTime || !d.startPrice) return null;

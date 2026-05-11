@@ -3,6 +3,7 @@ import { OHLCData, Timeframe } from '../types';
 import { generateInitialData, updateCurrentCandle, getNextLiveCandle, getTimeframeConfig, checkMarketStatus, fetchHistoryFromTwelveData, fetchHistoryFromYahooFinance, fetchHistoryFromBinance, fetchLatestForexPriceFromTwelveData, getMarketCategoryFromSymbol, getBasePriceForSymbol, fetchLivePriceForSymbol } from './dataService';
 import { getApiKey } from './apiConfig';
 import { updatePriceCache } from './priceService';
+import { getLocalPretrainedPredictions } from './huggingFaceModelService';
 
 // This service acts as the client-side gateway to our data sources.
 type TickCallback = (candle: OHLCData, isNewCandle: boolean) => void;
@@ -119,9 +120,7 @@ class StreamService {
                       high: Math.max(this.currentCandle.high, price),
                       low: Math.min(this.currentCandle.low, price),
                       volume: (this.currentCandle.volume || 0) + 1,
-                      pred_lstm: price,
-                      pred_xgboost: price,
-                      pred_rf: price,
+                      ...getLocalPretrainedPredictions(this.history, { ...this.currentCandle, close: price }),
                   };
               } else {
                   this.history.push(this.currentCandle);
@@ -134,9 +133,10 @@ class StreamService {
                       low: Math.min(this.currentCandle.close, price),
                       close: price,
                       volume: 1,
-                      pred_lstm: price,
-                      pred_xgboost: price,
-                      pred_rf: price,
+                  };
+                  next = {
+                      ...next,
+                      ...getLocalPretrainedPredictions(this.history, next),
                   };
                   isNew = true;
               }
@@ -193,16 +193,18 @@ class StreamService {
                     // Add NaN guards (|| 0) to prevent chart crashes
                     const close = parseFloat(k.c) || 0;
                     
-                    const candle: OHLCData = {
+                    const candleBase: OHLCData = {
                         time: k.t,
                         open: parseFloat(k.o) || 0,
                         high: parseFloat(k.h) || 0,
                         low: parseFloat(k.l) || 0,
                         close: close,
                         volume: parseFloat(k.v) || 0,
-                        pred_lstm: close * (1 + (Math.random() - 0.5) * 0.005),
-                        pred_xgboost: close * (1 + (Math.random() - 0.5) * 0.008),
-                        pred_rf: close * (1 + (Math.random() - 0.5) * 0.006),
+                    };
+
+                    const candle: OHLCData = {
+                        ...candleBase,
+                        ...getLocalPretrainedPredictions(this.history, candleBase),
                     };
 
                     this.currentCandle = candle;
@@ -265,6 +267,10 @@ class StreamService {
 
           if (this.currentCandle.time === currentBucket) {
              updatedCandle = updateCurrentCandle(this.currentCandle, this.symbol, volatilityModifier);
+             updatedCandle = {
+                ...updatedCandle,
+                ...getLocalPretrainedPredictions(this.history, updatedCandle),
+             };
           } else if (currentBucket > this.currentCandle.time) {
              this.history.push(this.currentCandle);
              if (this.history.length > 500) this.history.shift();

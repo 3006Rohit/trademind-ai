@@ -29,26 +29,19 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
           setUser(parsedUser);
-          // Safely attempt to load user data, fallback if missing
-          try {
-              const data = authService.getUserData(parsedUser.id);
-              setUserData(data);
-          } catch (e) {
-              console.warn("Failed to load user data, resetting session");
-              localStorage.removeItem('trade_active_session');
-              setUser(null);
-          }
+        const data = authService.getUserData(parsedUser.id);
+        setUserData(data);
         }
     } catch (e) {
         console.error("Session corrupted, clearing storage", e);
         localStorage.removeItem('trade_active_session');
         setUser(null);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   }, []);
 
-  const handleAuthSuccess = (authUser: User) => {
+    const handleAuthSuccess = (authUser: User) => {
     setUser(authUser);
     localStorage.setItem('trade_active_session', JSON.stringify(authUser));
     const data = authService.getUserData(authUser.id);
@@ -71,7 +64,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
           throw new Error("Invalid Verification Code");
       }
       const authUser = await authService.verifyAndRegister(email, pass, name, inputOtp);
-      handleAuthSuccess(authUser);
+        handleAuthSuccess(authUser);
   };
 
   const loginGoogle = async (mockEmail?: string) => {
@@ -85,14 +78,13 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
     setUser(null);
     setUserData(null);
     localStorage.removeItem('trade_active_session');
-    localStorage.removeItem('trade_jwt_token');
   };
 
   const saveUserDataFn = (partialData: Partial<UserData>) => {
       if (!user || !userData) return;
       const newData = { ...userData, ...partialData };
       setUserData(newData); 
-      authService.saveUserData(user.id, newData);
+        authService.saveUserData(user.id, newData);
   };
 
   return (
